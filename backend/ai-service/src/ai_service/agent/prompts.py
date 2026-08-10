@@ -25,6 +25,7 @@ def build_orchestrator_prompt(
     blast_radius_json: str,
     diff_text: str,
     convention_violations: list[dict],
+    semantic_context: str = "",
 ) -> str:
     return f"""
 Target Repository: {repo_id} (branch: {branch})
@@ -35,8 +36,11 @@ Changed Files:
 Changed Symbols:
 {changed_symbols}
 
-Knowledge Base Blast Radius Impact:
+Knowledge Base Blast Radius Impact (Graph DB):
 {blast_radius_json}
+
+Semantic Similarity Context (Vector DB):
+{semantic_context}
 
 Convention Violations:
 {convention_violations}

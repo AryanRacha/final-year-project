@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from ai_service.graph.client import Neo4jClient
-from ai_service.mcp.tools import tool_get_blast_radius, tool_get_file_dependencies
+from ai_service.vector.client import VectorKBClient
+from ai_service.mcp.tools import tool_get_blast_radius, tool_get_file_dependencies, tool_vector_search
 from ai_service.analysis.blast_radius import compute_blast_radius
 from ai_service.analysis.conventions import check_conventions, ConventionViolation
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
@@ -32,11 +33,15 @@ async def run_agentic_pr_review(
     changed_symbols: List[str],
     raw_diff_text: str,
     symbols: list,
+    vector_client: Optional[VectorKBClient] = None,
     llm_client: Optional[DualLLMClient] = None,
 ) -> AgentReviewResult:
     """Execute autonomous agentic PR review using FastMCP knowledge base tools + Gemini/Groq dual LLMs."""
     if llm_client is None:
         llm_client = DualLLMClient()
+
+    if vector_client is None:
+        vector_client = VectorKBClient()
 
     # 1. Parse raw diff text into hunks
     hunks = parse_git_diff(raw_diff_text)
@@ -45,6 +50,10 @@ async def run_agentic_pr_review(
     # 2. Query Knowledge Base via FastMCP tools
     blast_json = await tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
     blast_data = json.loads(blast_json)
+
+    # 2b. Retrieve semantic context from Vector KB
+    diff_query = raw_diff_text[:400] if raw_diff_text else repo_id
+    semantic_json = tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
 
     # 3. Static convention checks
     violations = check_conventions(symbols)
@@ -66,6 +75,7 @@ async def run_agentic_pr_review(
         blast_radius_json=blast_json,
         diff_text=raw_diff_text,
         convention_violations=violations_dicts,
+        semantic_context=semantic_json,
     )
     orchestrator_response = await llm_client.run_orchestrator(orch_prompt, SYSTEM_ORCHESTRATOR_PROMPT)
 

@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from ai_service.graph.client import Neo4jClient
 from ai_service.graph.reader import get_symbol, get_dependents, get_dependencies, get_all_symbols
 from ai_service.analysis.blast_radius import compute_blast_radius
@@ -91,3 +91,53 @@ async def tool_search_symbols(client: Neo4jClient, repo_id: str, query_str: str,
     """
     records = await client.execute_query(query, {"repo_id": repo_id, "branch": branch, "query_str": query_str})
     return json.dumps([r["symbol"] for r in records if "symbol" in r], indent=2)
+
+
+def tool_vector_search(
+    vector_client: Any,
+    query_text: str,
+    repo_id: Optional[str] = None,
+    content_type: Optional[str] = None,
+    n_results: int = 5,
+) -> str:
+    """Semantic similarity search across code, PRs, commits, and issues in Vector KB."""
+    where_clause = {}
+    if repo_id:
+        where_clause["repo"] = repo_id
+    if content_type:
+        where_clause["content_type"] = content_type
+
+    res = vector_client.query(
+        query_texts=[query_text],
+        n_results=n_results,
+        where=where_clause if where_clause else None,
+    )
+
+    hits = []
+    if res and res.get("documents") and len(res["documents"]) > 0 and res["documents"][0]:
+        docs = res["documents"][0]
+        metas = res["metadatas"][0] if res.get("metadatas") else [{}] * len(docs)
+        for doc, meta in zip(docs, metas):
+            hits.append({"metadata": meta, "text": doc})
+
+    return json.dumps({"query": query_text, "results": hits}, indent=2)
+
+
+async def tool_hybrid_search(
+    graph_client: Neo4jClient,
+    vector_client: Any,
+    repo_id: str,
+    query_text: str,
+    branch: str = "main",
+    n_results: int = 5,
+) -> str:
+    """Perform hybrid search combining vector semantic search and graph structural search."""
+    from ai_service.kb_unified import UnifiedKB
+    unified = UnifiedKB(neo4j_client=graph_client, vector_client=vector_client)
+    res = await unified.hybrid_search(
+        repo_id=repo_id,
+        query_text=query_text,
+        branch=branch,
+        n_results=n_results,
+    )
+    return json.dumps(res, indent=2)

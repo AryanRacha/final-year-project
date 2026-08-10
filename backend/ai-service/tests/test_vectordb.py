@@ -2,7 +2,8 @@ import unittest
 import os
 import tempfile
 import shutil
-from kb.vectordb import VectorDBClient, ContentType
+from ai_service.vector.client import VectorKBClient, ContentType
+from kb.vectordb import VectorDBClient
 
 class TestVectorDBClient(unittest.TestCase):
     def setUp(self):

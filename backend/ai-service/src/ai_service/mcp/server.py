@@ -2,24 +2,28 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 from fastmcp import FastMCP
 from ai_service.graph.client import Neo4jClient
+from ai_service.vector.client import VectorKBClient
 from ai_service.mcp.tools import (
     tool_get_repo_structure,
     tool_get_symbol_details,
     tool_get_blast_radius,
     tool_get_file_dependencies,
     tool_search_symbols,
+    tool_vector_search,
+    tool_hybrid_search,
 )
 
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP):
-    """FastMCP lifespan context manager for Neo4j async client connection."""
-    client = Neo4jClient()
-    await client.connect()
+    """FastMCP lifespan context manager for Neo4j and VectorKB client connections."""
+    graph_client = Neo4jClient()
+    await graph_client.connect()
+    vector_client = VectorKBClient()
     try:
-        yield {"client": client}
+        yield {"client": graph_client, "vector_client": vector_client}
     finally:
-        await client.close()
+        await graph_client.close()
 
 
 mcp_server = FastMCP("CodeReview-KB", lifespan=app_lifespan)
@@ -78,6 +82,25 @@ async def search_symbols(repo_id: str, query: str, branch: str = "main") -> str:
         return await tool_search_symbols(client, repo_id=repo_id, query_str=query, branch=branch)
     finally:
         await client.close()
+
+
+@mcp_server.tool()
+async def vector_search(query: str, repo_id: Optional[str] = None, n_results: int = 5) -> str:
+    """Semantic similarity search across code, PRs, commits, and issues in Vector KB."""
+    vector_client = VectorKBClient()
+    return tool_vector_search(vector_client, query_text=query, repo_id=repo_id, n_results=n_results)
+
+
+@mcp_server.tool()
+async def hybrid_search(repo_id: str, query: str, branch: str = "main", n_results: int = 5) -> str:
+    """Perform hybrid search combining vector semantic search and graph structural search."""
+    graph_client = Neo4jClient()
+    await graph_client.connect()
+    vector_client = VectorKBClient()
+    try:
+        return await tool_hybrid_search(graph_client, vector_client, repo_id=repo_id, query_text=query, branch=branch, n_results=n_results)
+    finally:
+        await graph_client.close()
 
 
 def run_mcp_server():

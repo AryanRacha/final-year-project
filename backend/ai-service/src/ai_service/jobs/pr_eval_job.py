@@ -2,8 +2,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
+from git import Repo
+
 from ai_service.graph.client import Neo4jClient
 from ai_service.graph.writer import delete_file_data, upsert_symbols, upsert_call_edges, upsert_import_edges
+from ai_service.vector.client import VectorKBClient
 from ai_service.repo.differ import get_changed_files, get_changed_symbols
 from ai_service.parsing.parser import CodeParser
 from ai_service.analysis.blast_radius import compute_blast_radius, BlastRadiusResult
@@ -27,11 +30,15 @@ async def run_pr_eval_job(
     base_ref: str,
     head_ref: str,
     client: Neo4jClient,
+    vector_client: Optional[VectorKBClient] = None,
     use_agent: bool = True,
 ) -> PrEvalResult:
-    """Flow 2 — Pull Request Evaluation job: incremental graph update -> blast radius -> convention check -> decision gate."""
+    """Flow 2 — Pull Request Evaluation job: incremental graph/vector update -> blast radius -> convention check -> decision gate."""
     start_time = time.time()
     root = Path(repo_dir)
+
+    if vector_client is None:
+        vector_client = VectorKBClient()
 
     try:
         changed_files = get_changed_files(root, base_ref, head_ref)
@@ -54,6 +61,18 @@ async def run_pr_eval_job(
                     await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=parse_res.calls)
                     await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=parse_res.imports)
 
+                    # Update vector KB entries for modified/added file symbols
+                    for sym in parse_res.symbols:
+                        vector_client.add_code_entry(
+                            repo=repo_id,
+                            branch=branch,
+                            file_path=sym.file_path,
+                            symbol=sym.name,
+                            signature=sym.signature,
+                            description=sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
+                            commit_hash=head_ref,
+                        )
+
         # Run import resolution pass for updated files
         from ai_service.graph.resolver import resolve_repo_imports
         await resolve_repo_imports(client, repo_id=repo_id, branch=branch)
@@ -75,6 +94,7 @@ async def run_pr_eval_job(
                 changed_symbols=changed_symbols,
                 raw_diff_text=raw_diff_text,
                 symbols=all_symbols,
+                vector_client=vector_client,
             )
             decision = agent_res.decision
         else:
