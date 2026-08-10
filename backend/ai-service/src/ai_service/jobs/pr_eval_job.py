@@ -27,6 +27,7 @@ async def run_pr_eval_job(
     base_ref: str,
     head_ref: str,
     client: Neo4jClient,
+    use_agent: bool = True,
 ) -> PrEvalResult:
     """Flow 2 — Pull Request Evaluation job: incremental graph update -> blast radius -> convention check -> decision gate."""
     start_time = time.time()
@@ -53,19 +54,43 @@ async def run_pr_eval_job(
                     await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=parse_res.calls)
                     await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=parse_res.imports)
 
-        # 1. Blast radius calculation
-        blast_radius = await compute_blast_radius(
-            client=client,
-            repo_id=repo_id,
-            branch=branch,
-            changed_symbols=changed_symbols,
-        )
+        # Run import resolution pass for updated files
+        from ai_service.graph.resolver import resolve_repo_imports
+        await resolve_repo_imports(client, repo_id=repo_id, branch=branch)
 
-        # 2. Convention checks
-        violations = check_conventions(all_symbols)
+        # Get raw diff text from Git Repo
+        try:
+            git_repo = Repo(root, search_parent_directories=True)
+            raw_diff_text = git_repo.git.diff(base_ref, head_ref)
+            git_repo.close()
+        except Exception:
+            raw_diff_text = f"Diff between {base_ref} and {head_ref}"
 
-        # 3. Decision gate
-        decision = make_decision(blast_radius=blast_radius, violations=violations)
+        if use_agent:
+            from ai_service.agent.reviewer import run_agentic_pr_review
+            agent_res = await run_agentic_pr_review(
+                client=client,
+                repo_id=repo_id,
+                branch=branch,
+                changed_symbols=changed_symbols,
+                raw_diff_text=raw_diff_text,
+                symbols=all_symbols,
+            )
+            decision = agent_res.decision
+        else:
+            # 1. Blast radius calculation
+            blast_radius = await compute_blast_radius(
+                client=client,
+                repo_id=repo_id,
+                branch=branch,
+                changed_symbols=changed_symbols,
+            )
+
+            # 2. Convention checks
+            violations = check_conventions(all_symbols)
+
+            # 3. Decision gate
+            decision = make_decision(blast_radius=blast_radius, violations=violations)
 
         duration = round(time.time() - start_time, 3)
         return PrEvalResult(

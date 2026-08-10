@@ -17,7 +17,11 @@ class ChangedFile:
 
 def get_changed_files(repo_path: str | Path, base_ref: str, head_ref: str) -> List[ChangedFile]:
     """Compute changed files between base_ref and head_ref in git repo."""
-    repo = Repo(repo_path)
+    try:
+        repo = Repo(repo_path, search_parent_directories=True)
+    except Exception:
+        return []
+
     try:
         diffs = repo.commit(base_ref).diff(repo.commit(head_ref))
 

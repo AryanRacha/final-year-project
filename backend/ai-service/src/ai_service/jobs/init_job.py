@@ -46,6 +46,10 @@ async def run_init_job(
             total_symbols += s_count
             total_edges += (c_count + i_count)
 
+        # Run import resolution pass to connect relative imports to actual File and Symbol nodes
+        from ai_service.graph.resolver import resolve_repo_imports
+        await resolve_repo_imports(client, repo_id=repo_id, branch=branch)
+
         duration = round(time.time() - start_time, 3)
         return InitResult(
             status="SUCCESS",

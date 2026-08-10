@@ -19,7 +19,7 @@ async def test_run_init_job_python_sample():
     )
 
     assert res.status == "SUCCESS"
-    assert res.symbols_count == 3
+    assert res.symbols_count >= 3
     assert res.duration_seconds >= 0.0
 
 

@@ -13,16 +13,17 @@ def test_mern_js_parsing():
     assert result.language == "javascript"
 
     symbol_names = {s.name for s in result.symbols}
-    assert "fetchUserData" in symbol_names
-    assert "handleGetProfile" in symbol_names
+    assert "getUserList" in symbol_names
+    assert "getUserProfile" in symbol_names
+    assert "formatUser" in symbol_names
 
-    # Check import (require)
-    import_mods = [imp.module_path for imp in result.imports]
-    assert "express" in import_mods
+    # Check ES6 import symbol
+    import_syms = [imp.imported_symbol for imp in result.imports]
+    assert "fetchUsers" in import_syms or "fetchUserById" in import_syms
 
-    # Check function call inside handleGetProfile
+    # Check function call inside getUserList
     callees = [c.callee_name for c in result.calls]
-    assert "fetchUserData" in callees
+    assert "fetchUsers" in callees or "fetchUserById" in callees
 
 
 def test_mern_jsx_component_parsing():

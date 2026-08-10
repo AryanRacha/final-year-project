@@ -1,10 +1,15 @@
-const express = require('express');
+import { fetchUsers, fetchUserById } from './api.js';
 
-function fetchUserData(userId) {
-    return { id: userId, role: 'admin' };
+export function formatUser(user) {
+    return `${user.name} <${user.email}>`;
 }
 
-const handleGetProfile = (req, res) => {
-    const data = fetchUserData(req.params.id);
-    res.json(data);
-};
+export async function getUserList() {
+    const users = await fetchUsers();
+    return users.map(formatUser);
+}
+
+export async function getUserProfile(id) {
+    const user = await fetchUserById(id);
+    return formatUser(user);
+}

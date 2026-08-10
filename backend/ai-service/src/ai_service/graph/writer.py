@@ -3,13 +3,22 @@ from ai_service.graph.client import Neo4jClient
 from ai_service.parsing.models import SymbolNode, CallEdge, ImportEdge
 
 
-async def upsert_symbols(client: Neo4jClient, repo_id: str, branch: str, symbols: List[SymbolNode]) -> int:
-    """MERGE Symbol nodes into Neo4j scoped strictly to repo_id and branch."""
+async def upsert_file_and_symbols(client: Neo4jClient, repo_id: str, branch: str, file_path: str, language: str, symbols: List[SymbolNode]) -> int:
+    """Create a File node and its Symbol nodes with DEFINES relationships."""
     if not symbols:
         return 0
 
-    query = """
+    # 1. Create or merge the File node
+    file_query = """
+    MERGE (f:File {repo_id: $repo_id, branch: $branch, file_path: $file_path})
+    SET f.language = $language
+    """
+    await client.execute_query(file_query, {"repo_id": repo_id, "branch": branch, "file_path": file_path, "language": language})
+
+    # 2. Create Symbol nodes with DEFINES edges from File
+    sym_query = """
     UNWIND $batch AS item
+    MATCH (f:File {repo_id: $repo_id, branch: $branch, file_path: item.file_path})
     MERGE (s:Symbol {repo_id: $repo_id, branch: $branch, qualified_name: item.qualified_name})
     SET s.name = item.name,
         s.kind = item.kind,
@@ -19,6 +28,7 @@ async def upsert_symbols(client: Neo4jClient, repo_id: str, branch: str, symbols
         s.end_line = item.end_line,
         s.signature = item.signature,
         s.docstring = item.docstring
+    MERGE (f)-[:DEFINES]->(s)
     """
 
     batch = [
@@ -36,20 +46,42 @@ async def upsert_symbols(client: Neo4jClient, repo_id: str, branch: str, symbols
         for sym in symbols
     ]
 
-    await client.execute_query(query, {"repo_id": repo_id, "branch": branch, "batch": batch})
+    await client.execute_query(sym_query, {"repo_id": repo_id, "branch": branch, "batch": batch})
     return len(symbols)
 
 
+# Keep the old name as an alias for backward compatibility
+async def upsert_symbols(client: Neo4jClient, repo_id: str, branch: str, symbols: List[SymbolNode]) -> int:
+    """MERGE Symbol nodes into Neo4j scoped strictly to repo_id and branch."""
+    if not symbols:
+        return 0
+
+    # Group symbols by file_path
+    by_file: dict[str, list[SymbolNode]] = {}
+    for sym in symbols:
+        by_file.setdefault(sym.file_path, []).append(sym)
+
+    total = 0
+    for fp, file_syms in by_file.items():
+        lang = file_syms[0].language if file_syms else "unknown"
+        total += await upsert_file_and_symbols(client, repo_id, branch, fp, lang, file_syms)
+    return total
+
+
 async def upsert_call_edges(client: Neo4jClient, repo_id: str, branch: str, calls: List[CallEdge]) -> int:
-    """MERGE CALLS relationships between caller and callee symbols within the same repo_id."""
+    """Create CALLS relationships only between existing Symbol nodes within the same repo_id.
+    Calls to unknown/external symbols are skipped (no orphan stub nodes)."""
     if not calls:
         return 0
 
+    # Use MATCH (not MERGE) for callee — only connect to known symbols
     query = """
     UNWIND $batch AS item
-    MERGE (caller:Symbol {repo_id: $repo_id, branch: $branch, qualified_name: item.caller_symbol})
-    MERGE (callee:Symbol {repo_id: $repo_id, branch: $branch, name: item.callee_name})
-    MERGE (caller)-[r:CALLS {file_path: item.file_path, line: item.line}]->(callee)
+    MATCH (caller:Symbol {repo_id: $repo_id, branch: $branch, qualified_name: item.caller_symbol})
+    MATCH (callee:Symbol {repo_id: $repo_id, branch: $branch})
+    WHERE callee.name = item.callee_name
+    MERGE (caller)-[r:CALLS]->(callee)
+    SET r.file_path = item.file_path, r.line = item.line
     """
 
     batch = [
@@ -67,36 +99,53 @@ async def upsert_call_edges(client: Neo4jClient, repo_id: str, branch: str, call
 
 
 async def upsert_import_edges(client: Neo4jClient, repo_id: str, branch: str, imports: List[ImportEdge]) -> int:
-    """MERGE IMPORTS relationships between module files and imported symbols."""
+    """Create IMPORTS relationships. Internal imports connect to existing Symbols.
+    External imports create a Package node."""
     if not imports:
         return 0
 
-    query = """
-    UNWIND $batch AS item
-    MERGE (m:Module {repo_id: $repo_id, branch: $branch, file_path: item.importer_file})
-    MERGE (s:Symbol {repo_id: $repo_id, branch: $branch, name: item.imported_symbol})
-    MERGE (m)-[r:IMPORTS {module_path: item.module_path, line: item.line}]->(s)
-    """
-
-    batch = [
-        {
+    for imp in imports:
+        # Try to match an internal symbol first
+        internal_query = """
+        MATCH (f:File {repo_id: $repo_id, branch: $branch, file_path: $importer_file})
+        MATCH (s:Symbol {repo_id: $repo_id, branch: $branch, name: $imported_symbol})
+        MERGE (f)-[r:IMPORTS]->(s)
+        SET r.module_path = $module_path, r.line = $line
+        """
+        result = await client.execute_query(internal_query, {
+            "repo_id": repo_id,
+            "branch": branch,
             "importer_file": imp.importer_file,
             "imported_symbol": imp.imported_symbol,
             "module_path": imp.module_path,
             "line": imp.line,
-        }
-        for imp in imports
-    ]
+        })
 
-    await client.execute_query(query, {"repo_id": repo_id, "branch": branch, "batch": batch})
+        # If no internal match found, create a Package dependency node
+        ext_query = """
+        MATCH (f:File {repo_id: $repo_id, branch: $branch, file_path: $importer_file})
+        MERGE (pkg:Package {name: $module_path, repo_id: $repo_id, branch: $branch})
+        MERGE (f)-[r:DEPENDS_ON]->(pkg)
+        SET r.imported_symbol = $imported_symbol, r.line = $line
+        """
+        await client.execute_query(ext_query, {
+            "repo_id": repo_id,
+            "branch": branch,
+            "importer_file": imp.importer_file,
+            "module_path": imp.module_path,
+            "imported_symbol": imp.imported_symbol,
+            "line": imp.line,
+        })
+
     return len(imports)
 
 
 async def delete_file_data(client: Neo4jClient, repo_id: str, branch: str, file_path: str) -> None:
-    """Delete nodes and edges belonging to a single file within a repo_id."""
+    """Delete a file node and all its symbols and edges within a repo_id."""
     query = """
-    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch, file_path: $file_path})
-    DETACH DELETE s
+    MATCH (f:File {repo_id: $repo_id, branch: $branch, file_path: $file_path})
+    OPTIONAL MATCH (f)-[:DEFINES]->(s:Symbol)
+    DETACH DELETE f, s
     """
     await client.execute_query(query, {"repo_id": repo_id, "branch": branch, "file_path": file_path})
 
