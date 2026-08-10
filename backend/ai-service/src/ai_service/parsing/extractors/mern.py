@@ -60,6 +60,8 @@ class MernExtractor(BaseExtractor):
                 if params_node:
                     sig_text += self._get_text(params_node, code_bytes)
 
+                code_body = self._get_text(node, code_bytes)
+
                 symbol = SymbolNode(
                     name=symbol_name,
                     kind=kind,
@@ -68,6 +70,7 @@ class MernExtractor(BaseExtractor):
                     start_line=node.start_point[0] + 1,
                     end_line=node.end_point[0] + 1,
                     signature=sig_text.strip(),
+                    code_body=code_body.strip(),
                     qualified_name=qualified_name,
                 )
                 result.symbols.append(symbol)
@@ -92,6 +95,8 @@ class MernExtractor(BaseExtractor):
                         scope_path = ".".join(parent_scope + [symbol_name]) if parent_scope else symbol_name
                         qualified_name = f"{file_path}::{scope_path}"
 
+                        code_body = self._get_text(declarator, code_bytes)
+
                         symbol = SymbolNode(
                             name=symbol_name,
                             kind=kind,
@@ -100,6 +105,7 @@ class MernExtractor(BaseExtractor):
                             start_line=declarator.start_point[0] + 1,
                             end_line=declarator.end_point[0] + 1,
                             signature=f"const {symbol_name} = ...",
+                            code_body=code_body.strip(),
                             qualified_name=qualified_name,
                         )
                         result.symbols.append(symbol)

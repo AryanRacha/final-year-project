@@ -1,9 +1,11 @@
 import os
+import time
 from enum import Enum
 from typing import List, Dict, Any, Optional
 
 import chromadb
 from chromadb.utils import embedding_functions
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
 from ai_service.config import settings
 
@@ -13,6 +15,53 @@ class ContentType(str, Enum):
     PR = "pr"
     COMMIT = "commit"
     ISSUE = "issue"
+
+
+class GeminiEmbeddingFunction(EmbeddingFunction):
+    """ChromaDB EmbeddingFunction using Google's official google-genai SDK with rate limit handling."""
+
+    def __init__(self, api_key: str, model_name: str = "models/gemini-embedding-001"):
+        from google import genai
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
+
+    def name(self) -> str:
+        return "gemini_embedding_function"
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model_name": self.model_name}
+
+    def __call__(self, input: Documents) -> Embeddings:
+        if not input:
+            return []
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.client.models.embed_content(
+                    model=self.model_name,
+                    contents=list(input),
+                )
+                return [emb.values for emb in response.embeddings]
+            except Exception as e:
+                err_str = str(e)
+                if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str) and attempt < max_retries - 1:
+                    time.sleep(4 * (attempt + 1))
+                    continue
+
+                embeddings = []
+                for doc in input:
+                    try:
+                        res = self.client.models.embed_content(
+                            model=self.model_name,
+                            contents=doc,
+                        )
+                        embeddings.append(res.embeddings[0].values)
+                    except Exception:
+                        embeddings.append([0.0] * 3072)
+                return embeddings
+
+        return [[0.0] * 3072 for _ in input]
 
 
 class VectorKBClient:
@@ -27,18 +76,29 @@ class VectorKBClient:
 
         gemini_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or settings.gemini_api_key
         if gemini_key:
-            self.embedding_function = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
-                api_key=gemini_key,
-                task_type="RETRIEVAL_DOCUMENT"
-            )
+            try:
+                self.embedding_function = GeminiEmbeddingFunction(api_key=gemini_key)
+            except Exception:
+                self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
         else:
             # Fallback to default if no key is provided
             self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
 
-        self.collection = self.client.get_or_create_collection(
-            name="knowledge_base",
-            embedding_function=self.embedding_function
-        )
+        try:
+            self.collection = self.client.get_or_create_collection(
+                name="knowledge_base",
+                embedding_function=self.embedding_function
+            )
+        except ValueError:
+            # If collection exists on disk with a conflicting embedding function (e.g. default), recreate it
+            try:
+                self.client.delete_collection(name="knowledge_base")
+            except Exception:
+                pass
+            self.collection = self.client.create_collection(
+                name="knowledge_base",
+                embedding_function=self.embedding_function
+            )
 
     def _upsert(self, doc_id: str, document: str, metadata: Dict[str, Any]):
         """Helper to upsert a document with its metadata."""
@@ -56,13 +116,26 @@ class VectorKBClient:
         symbol: str,
         signature: str,
         description: str,
-        commit_hash: str
+        commit_hash: str,
+        start_line: Optional[int] = None,
+        code_body: str = "",
     ):
         """
         Add or update a code entry in the Knowledge Base.
         """
-        doc_id = f"code_{repo}_{branch}_{file_path}_{symbol}"
-        document = f"Signature:\n{signature}\n\nDescription:\n{description}"
+        line_suffix = f"_{start_line}" if start_line is not None else ""
+        doc_id = f"code_{repo}_{branch}_{file_path}_{symbol}{line_suffix}"
+        
+        doc_parts = [
+            f"File: {file_path}" + (f" (lines {start_line})" if start_line else ""),
+            f"Symbol: {symbol}",
+            f"Signature:\n{signature}",
+            f"Description:\n{description}",
+        ]
+        if code_body:
+            doc_parts.append(f"Implementation Code:\n{code_body}")
+        document = "\n\n".join(doc_parts)
+
         metadata = {
             "repo": repo,
             "branch": branch,
@@ -73,6 +146,53 @@ class VectorKBClient:
             "last_valid_commit": commit_hash
         }
         self._upsert(doc_id, document, metadata)
+
+    def add_code_entries_batch(self, entries: List[Dict[str, Any]]):
+        """
+        Batch upsert multiple code entries into ChromaDB at once to reduce embedding API calls.
+        Deduplicates keys by unique doc_id to avoid ChromaDB batch conflicts.
+        """
+        if not entries:
+            return
+
+        unique_map = {}
+        for item in entries:
+            start_line = item.get("start_line")
+            line_suffix = f"_{start_line}" if start_line is not None else ""
+            doc_id = f"code_{item['repo']}_{item['branch']}_{item['file_path']}_{item['symbol']}{line_suffix}"
+            
+            doc_parts = [
+                f"File: {item['file_path']}" + (f" (lines {start_line})" if start_line else ""),
+                f"Symbol: {item['symbol']}",
+                f"Signature:\n{item['signature']}",
+                f"Description:\n{item['description']}",
+            ]
+            if item.get("code_body"):
+                doc_parts.append(f"Implementation Code:\n{item['code_body']}")
+            document = "\n\n".join(doc_parts)
+
+            metadata = {
+                "repo": item["repo"],
+                "branch": item["branch"],
+                "file_path": item["file_path"],
+                "symbol": item["symbol"],
+                "content_type": ContentType.CODE.value,
+                "commit_hash": item["commit_hash"],
+                "last_valid_commit": item["commit_hash"]
+            }
+            unique_map[doc_id] = (document, metadata)
+
+        doc_ids = list(unique_map.keys())
+        docs = [v[0] for v in unique_map.values()]
+        metas = [v[1] for v in unique_map.values()]
+
+        batch_size = 40
+        for i in range(0, len(doc_ids), batch_size):
+            self.collection.upsert(
+                ids=doc_ids[i:i + batch_size],
+                documents=docs[i:i + batch_size],
+                metadatas=metas[i:i + batch_size]
+            )
 
     def add_pr_entry(
         self,

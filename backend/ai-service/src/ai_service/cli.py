@@ -128,5 +128,31 @@ def visualize(repo_dir: str, output: str):
     click.echo(f"Successfully generated interactive Knowledge Base graph at: {out_path.resolve()}")
 
 
+@main.command()
+@click.option("--repo-id", required=True, help="Target repository ID to clean.")
+@click.option("--branch", help="Optional target branch to clean.")
+def reset(repo_id: str, branch: Optional[str]):
+    """Reset and purge Knowledge Base data (Vector DB & Graph DB) for a repository."""
+    async def _run():
+        graph_client = Neo4jClient()
+        await graph_client.connect()
+        vector_client = VectorKBClient()
+        try:
+            from ai_service.graph.writer import delete_repo_data
+            await delete_repo_data(graph_client, repo_id=repo_id, branch=branch)
+            try:
+                where_clause = {"repo": repo_id}
+                if branch:
+                    where_clause["branch"] = branch
+                vector_client.collection.delete(where=where_clause)
+            except Exception:
+                pass
+            click.echo(f"Successfully purged Knowledge Base data for repo '{repo_id}'" + (f" (branch: {branch})" if branch else ""))
+        finally:
+            await graph_client.close()
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     main()

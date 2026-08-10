@@ -45,6 +45,15 @@ async def run_init_job(
 
     try:
         await ensure_schema(client)
+
+        # Purge existing stale data for this repo_id + branch to prevent duplicates
+        from ai_service.graph.writer import delete_repo_data
+        await delete_repo_data(client, repo_id=repo_id, branch=branch)
+        try:
+            vector_client.collection.delete(where={"$and": [{"repo": repo_id}, {"branch": branch}]})
+        except Exception:
+            pass
+
         parser = CodeParser()
         parse_results = parser.parse_directory(root)
 
@@ -52,6 +61,7 @@ async def run_init_job(
         total_edges = 0
         total_vector_entries = 0
 
+        vector_entries = []
         for pr in parse_results:
             if pr.errors:
                 return InitResult(status="FAILED", errors=pr.errors)
@@ -63,18 +73,22 @@ async def run_init_job(
             total_symbols += s_count
             total_edges += (c_count + i_count)
 
-            # Dual-write into Vector KB
             for sym in pr.symbols:
-                vector_client.add_code_entry(
-                    repo=repo_id,
-                    branch=branch,
-                    file_path=sym.file_path,
-                    symbol=sym.name,
-                    signature=sym.signature,
-                    description=sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
-                    commit_hash=commit_hash,
-                )
-                total_vector_entries += 1
+                vector_entries.append({
+                    "repo": repo_id,
+                    "branch": branch,
+                    "file_path": sym.file_path,
+                    "symbol": sym.name,
+                    "start_line": sym.start_line,
+                    "signature": sym.signature,
+                    "description": sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
+                    "code_body": sym.code_body,
+                    "commit_hash": commit_hash,
+                })
+
+        # Dual-write into Vector KB in batch
+        vector_client.add_code_entries_batch(vector_entries)
+        total_vector_entries = len(vector_entries)
 
         # Run import resolution pass to connect relative imports to actual File and Symbol nodes
         from ai_service.graph.resolver import resolve_repo_imports

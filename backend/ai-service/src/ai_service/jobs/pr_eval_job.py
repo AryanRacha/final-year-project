@@ -71,6 +71,8 @@ async def run_pr_eval_job(
                             signature=sym.signature,
                             description=sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
                             commit_hash=head_ref,
+                            start_line=sym.start_line,
+                            code_body=sym.code_body,
                         )
 
         # Run import resolution pass for updated files

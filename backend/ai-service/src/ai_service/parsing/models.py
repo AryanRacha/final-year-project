@@ -16,6 +16,7 @@ class SymbolNode:
     end_line: int
     signature: str = ""
     docstring: str = ""
+    code_body: str = ""
     qualified_name: str = ""
 
     def __post_init__(self):

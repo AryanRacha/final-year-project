@@ -58,6 +58,9 @@ class PythonExtractor(BaseExtractor):
                 # Extract docstring if present
                 docstring = self._extract_docstring(node, code_bytes)
 
+                # Extract full source code body of function/class
+                code_body = code_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
+
                 symbol = SymbolNode(
                     name=symbol_name,
                     kind=kind,
@@ -67,6 +70,7 @@ class PythonExtractor(BaseExtractor):
                     end_line=node.end_point[0] + 1,
                     signature=sig_text.strip(),
                     docstring=docstring,
+                    code_body=code_body.strip(),
                     qualified_name=qualified_name,
                 )
                 result.symbols.append(symbol)
