@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
-import Github from "@/app/components/GithubIcon";
+import React, { useState, useEffect, useRef } from 'react';
+import { ChatMessage, ToolStep, Citation, RepoInfo } from './types';
+import { ToolVisualizer } from './components/ToolVisualizer';
+import { CitationViewer } from './components/CitationViewer';
 import {
   Sparkles,
   GitBranch,
@@ -33,79 +33,172 @@ export default function LandingPage() {
     "guard",
   );
 
-  const sampleTraces = {
-    guard: {
-      title: "AI Code Quality & Hallucination Inspection",
-      codeSnippet: `// ⚠️ Detected AI-generated code snippet in api-service/src/routes/auth.routes.ts
-const user = await db.queryUser(code); 
-// CRITICAL WARNING: AI assumed 'db.queryUser' exists, but Neo4j symbol graph shows
-// method was renamed to 'userRepository.findByOAuthId()' in commit e4f912a.`,
-      status: "BLOCKED BEFORE MERGE",
-      badge: "Anti-Hallucination Guard active",
-      detail: "Prevented runtime TypeError across 3 dependent microservices.",
-    },
-    graph: {
-      title: "Multi-Repo Intelligence Dependency Graph",
-      codeSnippet: `Graph Traversal Path:
-[frontend] -> POST /api/auth/github/callback 
-  └─> [api-service] -> githubAuthService.handleCallback()
-        └─> [ai-service] -> gRPC /vector/embed_symbol
-              └─> [ChromaDB] -> Collection: 'symbol_embeddings_v2'`,
-      status: "GRAPH SYNCHRONIZED",
-      badge: "Neo4j + Vector Hybrid Index",
-      detail: "Resolved 142 cross-repo symbol dependencies in 18ms.",
-    },
-    agents: {
-      title: "Autonomous ReAct Agent Blast-Radius Fix",
-      codeSnippet: `Agent Step 1: get_blast_radius(symbol="AuthContextVariables")
-Agent Step 2: hybrid_search("JWT token verification fallback")
-Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
-      status: "PATCH VERIFIED",
-      badge: "Iterative Tool Pipeline",
-      detail:
-        "Specialised agent investigated, tested, and resolved code issue.",
-    },
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch available repositories on load
+  useEffect(() => {
+    fetchRepos();
+  }, []);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
+
+  const fetchRepos = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/repos');
+      if (res.ok) {
+        const data: RepoInfo = await res.json();
+        if (data.repos && data.repos.length > 0) {
+          setRepos(data.repos);
+          if (!data.repos.includes(selectedRepo)) {
+            setSelectedRepo(data.repos[0]);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Backend server not reachable on load:', e);
+    }
   };
 
+  const handleSendMessage = async (textToSend?: string) => {
+    const query = textToSend || inputMessage;
+    if (!query.trim() || isLoading) return;
+
+    const userMsg: ChatMessage = {
+      id: `user_${Date.now()}`,
+      role: 'user',
+      content: query,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    if (!textToSend) setInputMessage('');
+    setIsLoading(true);
+    setActiveToolSteps([]);
+    setActiveLatency(undefined);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo_id: selectedRepo,
+          message: query,
+          branch: 'main',
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      const assistantMsg: ChatMessage = {
+        id: `ast_${Date.now()}`,
+        role: 'assistant',
+        content: data.answer,
+        timestamp: new Date().toLocaleTimeString(),
+        citations: data.citations || [],
+        tool_steps: data.tool_steps || [],
+        total_latency_ms: data.total_latency_ms,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+      setActiveToolSteps(data.tool_steps || []);
+      setActiveLatency(data.total_latency_ms);
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: `err_${Date.now()}`,
+        role: 'assistant',
+        content: `⚠️ Failed to query Knowledge Base: ${err.message || 'Make sure FastAPI server is running at http://127.0.0.1:8000'}`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleIngestRepo = async () => {
+    if (!ingestPath.trim() || !ingestRepoId.trim()) return;
+    setIsIngesting(true);
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo_id: ingestRepoId,
+          repo_dir: ingestPath,
+          branch: 'main',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Successfully ingested repository '${ingestRepoId}'! Parsed ${data.files_parsed} files and ${data.symbols_parsed} symbols.`);
+        setIsIngestModalOpen(false);
+        fetchRepos();
+        setSelectedRepo(ingestRepoId);
+      } else {
+        const err = await res.json();
+        alert(`Ingestion failed: ${err.detail || 'Error'}`);
+      }
+    } catch (e: any) {
+      alert(`Ingestion request failed: ${e.message}`);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const samplePrompts = [
+    'How does hybrid search work in this repository?',
+    'What functions and dependencies exist in reviewer.py?',
+    'Where is Neo4j client initialized and used?',
+    'Show me the full structure of this codebase.',
+  ];
+
   return (
-    <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white overflow-x-hidden">
-      {/* Top Background Gradient Effect */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[500px] bg-gradient-to-b from-zinc-800/20 via-zinc-900/10 to-transparent blur-3xl pointer-events-none rounded-full" />
-      <div className="absolute inset-0 bg-dot-grid opacity-20 pointer-events-none" />
-
-      {/* Vercel Header Bar */}
-      <header className="sticky top-0 z-50 w-full border-b border-zinc-800/80 bg-black/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold text-sm font-mono shadow-md group-hover:scale-105 transition-transform">
-                S
-              </div>
-              <span className="text-base font-bold tracking-tight text-white">
-                Sentinel AI
+    <div className="flex flex-col h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
+      {/* Top Header Bar */}
+      <header className="flex items-center justify-between px-6 py-3 bg-slate-950/90 border-b border-slate-800/80 backdrop-blur-md z-10 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-lg shadow-indigo-500/20">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2">
+              CodeBase Knowledge Base AI Agent
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 font-mono text-indigo-300">
+                RAG + Visualizer
               </span>
-            </Link>
+            </h1>
+            <p className="text-xs text-slate-400">
+              Interactive Repository QA & Real-Time Agent Tool Trace
+            </p>
+          </div>
+        </div>
 
-            <nav className="hidden md:flex items-center gap-6 text-xs text-zinc-400 font-medium">
-              <a
-                href="#features"
-                className="hover:text-white transition-colors"
-              >
-                Features
-              </a>
-              <a href="#preview" className="hover:text-white transition-colors">
-                Architecture
-              </a>
-              <a
-                href="#guardrails"
-                className="hover:text-white transition-colors"
-              >
-                AI Guardrails
-              </a>
-              <a href="#demo" className="hover:text-white transition-colors">
-                Live Pipeline
-              </a>
-            </nav>
+        {/* Live System Status Badges & Repo Selector */}
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Neo4j Graph</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+              <Layers className="w-3.5 h-3.5 text-purple-400" />
+              <span>Chroma Vector KB</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Gemini 2.5 Flash</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -147,114 +240,96 @@ Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative z-10 max-w-5xl mx-auto px-6 pt-24 pb-16 text-center">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300 mb-8 shadow-sm">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-zinc-400">Maintenance-First Platform</span>
-          <span className="text-zinc-600">•</span>
-          <span className="text-white font-semibold">
-            Catch AI Code Before Production
-          </span>
-        </div>
+      {/* Main Workspace Dual Panel Layout */}
+      <div className="flex flex-1 overflow-hidden p-4 gap-4">
+        {/* Left Panel: RAG Chat Interface */}
+        <div className="flex-1 flex flex-col bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden shadow-2xl backdrop-blur-md">
+          {/* Chat Messages List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto p-6 gap-4">
+                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-xl">
+                  <Bot className="w-10 h-10" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-100">
+                    Ask anything about repository <span className="text-indigo-400 font-mono">'{selectedRepo}'</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    The AI agent will query Neo4j Knowledge Graph and Chroma Vector DB to return cited code answers.
+                  </p>
+                </div>
 
-        {/* Hero Title */}
-        <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-6">
-          The Intelligence Layer for <br />
-          <span className="bg-gradient-to-r from-white via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
-            Multi-Repo Projects
-          </span>
-        </h1>
+                {/* Sample Prompt Suggestions */}
+                <div className="w-full flex flex-col gap-2 mt-2">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-left">
+                    Suggested Questions:
+                  </span>
+                  {samplePrompts.map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSendMessage(p)}
+                      className="text-left text-xs p-3 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900 text-slate-300 transition-all flex items-center justify-between group"
+                    >
+                      <span>{p}</span>
+                      <Zap className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0 mt-1">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                  )}
 
-        {/* Subtitle */}
-        <p className="max-w-2xl mx-auto text-sm md:text-base text-zinc-400 leading-relaxed mb-10">
-          Build an intelligent structural layer over your repositories.
-          Specialised agents investigate, review, and fix code — catching
-          AI-generated hallucinations, API mismatches, and regressions before
-          merge.
-        </p>
+                  <div
+                    className={`max-w-3xl flex flex-col rounded-xl p-4 text-xs leading-relaxed shadow-md ${
+                      msg.role === 'user'
+                        ? 'bg-indigo-600 text-white rounded-br-none font-medium'
+                        : 'bg-slate-900/90 border border-slate-800 text-slate-200 rounded-bl-none'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5 opacity-60 font-mono text-[10px]">
+                      <span>{msg.role === 'user' ? 'You' : 'KB Assistant'}</span>
+                      <span>{msg.timestamp}</span>
+                    </div>
 
-        {/* CTA Group */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <button
-            onClick={loginWithGithub}
-            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-zinc-200 active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer"
-          >
-            <Github className="w-4 h-4 fill-black" />
-            <span>Connect GitHub Repository</span>
-          </button>
+                    <div className="whitespace-pre-wrap font-sans text-sm">{msg.content}</div>
 
-          <Link
-            href="/dashboard"
-            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-sm font-medium transition-all flex items-center justify-center gap-2"
-          >
-            <span>Explore Dashboard</span>
-            <ChevronRight className="w-4 h-4 text-zinc-400" />
-          </Link>
-        </div>
+                    {/* Citations section if assistant message */}
+                    {msg.citations && msg.citations.length > 0 && (
+                      <CitationViewer citations={msg.citations} />
+                    )}
+                  </div>
 
-        {/* Live Metrics Strip */}
-        <div className="mt-14 pt-8 border-t border-zinc-900 grid grid-cols-2 md:grid-cols-4 gap-6 text-left">
-          <div>
-            <div className="text-xl font-bold font-mono text-white">
-              Multi-Repo
-            </div>
-            <div className="text-xs text-zinc-500 mt-0.5">
-              Cross-service Symbol Graph
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold font-mono text-emerald-400">
-              0% Regressions
-            </div>
-            <div className="text-xs text-zinc-500 mt-0.5">
-              AI Code Verification Filter
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold font-mono text-purple-400">
-              ReAct Pipeline
-            </div>
-            <div className="text-xs text-zinc-500 mt-0.5">
-              Iterative Investigation Tools
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-bold font-mono text-cyan-400">
-              Real-Time
-            </div>
-            <div className="text-xs text-zinc-500 mt-0.5">
-              SSE Reasoning & Citations
-            </div>
-          </div>
-        </div>
-      </section>
+                  {msg.role === 'user' && (
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0 mt-1">
+                      <User className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
 
-      {/* Interactive Window Preview Showcase */}
-      <section
-        id="preview"
-        className="relative z-10 max-w-6xl mx-auto px-6 py-12"
-      >
-        <div className="rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl overflow-hidden">
-          {/* Top Bar Window Chrome */}
-          <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 text-xs font-mono">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-zinc-800" />
-              <div className="w-3 h-3 rounded-full bg-zinc-800" />
-              <div className="w-3 h-3 rounded-full bg-zinc-800" />
-              <span className="ml-2 text-zinc-400">
-                sentinel-intelligence-layer // live-monitor
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-zinc-500">
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Active Agent Guard
-              </span>
-              <span>Neo4j v5.12</span>
-              <span>Chroma Vector KB</span>
-            </div>
+            {isLoading && (
+              <div className="flex gap-3 justify-start items-center text-xs text-indigo-400">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Bot className="w-4 h-4 animate-bounce" />
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                  <span>Agent executing tools & querying Knowledge Base...</span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
 
           {/* Window Body */}

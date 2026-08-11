@@ -10,7 +10,7 @@ load_dotenv()
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from ai_service.graph.client import Neo4jClient
@@ -26,10 +26,6 @@ from ai_service.mcp.tools import (
     tool_search_symbols,
 )
 from ai_service.agent.llm_client import DualLLMClient
-<<<<<<< HEAD
-from ai_service.agent.agent_loop import AutonomousAgentLoop
-=======
->>>>>>> e69b050 (Added a basic chat interface with agentic logic to answer the questions)
 from ai_service.jobs.init_job import run_init_job
 from pathlib import Path
 
@@ -170,8 +166,40 @@ async def ingest_repository(req: IngestRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
-    finally:
-        await graph_client.close()
+@app.post("/api/chat/stream")
+async def agent_chat_stream(req: ChatRequest):
+    """
+    Autonomous ReAct Agentic RAG Streaming Endpoint (SSE):
+    1. Agent runs iterative ReAct reasoning loop.
+    2. Streams thoughts, tool calls, tool responses, answer text deltas, and citations.
+    """
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+    except Exception:
+        pass
+
+    vector_client = VectorKBClient()
+    llm_client = DualLLMClient()
+    agent_loop = AutonomousAgentLoop(llm_client=llm_client)
+
+    async def event_generator():
+        try:
+            async for event in agent_loop.run_stream(
+                user_query=req.message,
+                repo_id=req.repo_id,
+                branch=req.branch or "main",
+                graph_client=graph_client,
+                vector_client=vector_client,
+            ):
+                yield event
+        finally:
+            try:
+                await graph_client.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/chat", response_model=ChatResponse)

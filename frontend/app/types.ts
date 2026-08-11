@@ -10,6 +10,7 @@ export interface Citation {
 
 export interface ToolStep {
   id: string;
+  step_index?: number;
   tool_name: string;
   title: string;
   status: "completed" | "failed" | "running";
@@ -26,7 +27,9 @@ export interface ChatMessage {
   timestamp: string;
   citations?: Citation[];
   tool_steps?: ToolStep[];
+  thoughts?: string[];
   total_latency_ms?: number;
+  isStreaming?: boolean;
 }
 
 export interface RepoInfo {
@@ -34,3 +37,4 @@ export interface RepoInfo {
   vector_count: number;
   graph_repos: string[];
 }
+
