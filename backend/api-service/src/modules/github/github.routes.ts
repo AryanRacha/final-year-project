@@ -110,6 +110,10 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
   const user = c.get("user");
   const repoId = c.req.param("id");
 
+  if (!repoId) {
+    return c.json({ error: "Missing repository id" }, 400);
+  }
+
   const [repo] = await db
     .select()
     .from(connectedRepositories)
