@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { ToolStep } from '../types';
+import React, { useState } from "react";
+import { ToolStep } from "../types";
 import {
   Sparkles,
   ChevronDown,
@@ -18,7 +18,7 @@ import {
   GitMerge,
   Maximize2,
   Minimize2,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface ThinkingBlockProps {
   thoughts?: string[];
@@ -42,18 +42,18 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
   const getStepIcon = (toolName: string) => {
     switch (toolName) {
-      case 'hybrid_search':
+      case "hybrid_search":
         return <GitMerge className="w-3.5 h-3.5 text-cyan-400" />;
-      case 'vector_search':
+      case "vector_search":
         return <Database className="w-3.5 h-3.5 text-purple-400" />;
-      case 'get_symbol_details':
-      case 'search_symbols':
+      case "get_symbol_details":
+      case "search_symbols":
         return <Code className="w-3.5 h-3.5 text-emerald-400" />;
-      case 'get_file_dependencies':
+      case "get_file_dependencies":
         return <Layers className="w-3.5 h-3.5 text-amber-400" />;
-      case 'get_blast_radius':
+      case "get_blast_radius":
         return <Activity className="w-3.5 h-3.5 text-rose-400" />;
-      case 'get_repo_structure':
+      case "get_repo_structure":
         return <FileText className="w-3.5 h-3.5 text-blue-400" />;
       default:
         return <Terminal className="w-3.5 h-3.5 text-zinc-300" />;
@@ -88,7 +88,8 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
             </span>
           ) : (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300">
-              {toolSteps.length} Step{toolSteps.length === 1 ? '' : 's'} Processed
+              {toolSteps.length} Step{toolSteps.length === 1 ? "" : "s"}{" "}
+              Processed
             </span>
           )}
         </div>
@@ -100,7 +101,11 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
               {totalLatencyMs}ms
             </span>
           )}
-          {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {isOpen ? (
+            <ChevronUp className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5" />
+          )}
         </div>
       </button>
 
@@ -111,7 +116,10 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           {thoughts.length > 0 && (
             <div className="space-y-1.5 pb-2.5 border-b border-zinc-800/60">
               {thoughts.map((t, idx) => (
-                <div key={idx} className="flex items-start gap-2 text-zinc-300 italic leading-relaxed">
+                <div
+                  key={idx}
+                  className="flex items-start gap-2 text-zinc-300 italic leading-relaxed"
+                >
                   <span className="text-amber-400/80 select-none">›</span>
                   <span className="text-[11px] text-zinc-300">{t}</span>
                 </div>
@@ -143,7 +151,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {step.status === 'running' ? (
+                        {step.status === "running" ? (
                           <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
                         ) : (
                           <div className="flex items-center gap-1.5 font-mono text-[10px] text-zinc-500">
@@ -186,7 +194,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                               Output Result Payload:
                             </span>
                             <pre className="text-cyan-400 bg-zinc-950 p-2 rounded border border-zinc-800/80 max-h-48 overflow-y-auto overflow-x-auto whitespace-pre-wrap">
-                              {typeof step.raw_output === 'string'
+                              {typeof step.raw_output === "string"
                                 ? step.raw_output
                                 : JSON.stringify(step.raw_output, null, 2)}
                             </pre>

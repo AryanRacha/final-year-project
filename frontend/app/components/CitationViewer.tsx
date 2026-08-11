@@ -1,14 +1,23 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Citation } from '../types';
-import { FileCode, Database, GitBranch, ExternalLink, X, Code2 } from 'lucide-react';
+import React, { useState } from "react";
+import { Citation } from "../types";
+import {
+  FileCode,
+  Database,
+  GitBranch,
+  ExternalLink,
+  X,
+  Code2,
+} from "lucide-react";
 
 interface CitationViewerProps {
   citations: Citation[];
 }
 
-export const CitationViewer: React.FC<CitationViewerProps> = ({ citations }) => {
+export const CitationViewer: React.FC<CitationViewerProps> = ({
+  citations,
+}) => {
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
 
   if (!citations || citations.length === 0) return null;
@@ -33,7 +42,7 @@ export const CitationViewer: React.FC<CitationViewerProps> = ({ citations }) => 
               [{cit.id}]
             </span>
             <span className="truncate max-w-[180px] text-[11px] text-zinc-200">
-              {cit.file_path.split('/').pop()}
+              {cit.file_path.split("/").pop()}
             </span>
             {cit.lines && (
               <span className="text-[10px] text-zinc-500">:{cit.lines}</span>
@@ -67,7 +76,9 @@ export const CitationViewer: React.FC<CitationViewerProps> = ({ citations }) => 
                       </span>
                     )}
                     {activeCitation.lines && (
-                      <span className="font-mono text-zinc-400 text-[11px]">Lines: {activeCitation.lines}</span>
+                      <span className="font-mono text-zinc-400 text-[11px]">
+                        Lines: {activeCitation.lines}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -89,9 +100,15 @@ export const CitationViewer: React.FC<CitationViewerProps> = ({ citations }) => 
 
             {/* Modal Footer */}
             <div className="p-3.5 bg-zinc-950 border-t border-zinc-800 text-right text-xs text-zinc-400 font-mono">
-              {activeCitation.distance !== undefined && activeCitation.distance !== null && (
-                <span>Vector Similarity Distance: <strong className="text-white">{activeCitation.distance}</strong></span>
-              )}
+              {activeCitation.distance !== undefined &&
+                activeCitation.distance !== null && (
+                  <span>
+                    Vector Similarity Distance:{" "}
+                    <strong className="text-white">
+                      {activeCitation.distance}
+                    </strong>
+                  </span>
+                )}
             </div>
           </div>
         </div>

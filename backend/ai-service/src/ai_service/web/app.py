@@ -1,0 +1,407 @@
+import os
+import time
+import json
+import asyncio
+from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+from ai_service.graph.client import Neo4jClient
+from ai_service.vector.client import VectorKBClient
+from ai_service.kb_unified import UnifiedKB
+from ai_service.mcp.tools import (
+    tool_hybrid_search,
+    tool_vector_search,
+    tool_get_symbol_details,
+    tool_get_file_dependencies,
+    tool_get_repo_structure,
+    tool_get_blast_radius,
+    tool_search_symbols,
+)
+from ai_service.agent.llm_client import DualLLMClient
+from ai_service.jobs.init_job import run_init_job
+from pathlib import Path
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+app = FastAPI(
+    title="AI Service Knowledge Base & Agent API",
+    description="API for Codebase RAG Chat, Graph & Vector Search, Agent Tool Visualization, and Ingestion.",
+    version="1.0.0",
+)
+
+# Enable CORS for local Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    repo_id: str
+    message: str
+    branch: Optional[str] = "main"
+    history: Optional[List[ChatMessage]] = []
+
+
+class Citation(BaseModel):
+    id: int
+    file_path: str
+    symbol: Optional[str] = None
+    lines: Optional[str] = None
+    snippet: str
+    source_type: str  # 'vector' or 'graph'
+    distance: Optional[float] = None
+
+
+class ToolStep(BaseModel):
+    id: str
+    tool_name: str
+    title: str
+    status: str  # 'completed', 'failed', 'running'
+    latency_ms: float
+    args: Dict[str, Any]
+    summary: str
+    raw_output: Any
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    citations: List[Citation]
+    tool_steps: List[ToolStep]
+    repo_id: str
+    branch: str
+    total_latency_ms: float
+
+
+class IngestRequest(BaseModel):
+    repo_id: str
+    repo_dir: str
+    branch: Optional[str] = "main"
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok", "service": "ai-service-kb"}
+
+
+@app.get("/api/repos")
+async def list_repositories():
+    """List indexed repositories from Vector KB and Graph DB."""
+    try:
+        vector_client = VectorKBClient()
+        data = vector_client.collection.get(include=["metadatas"])
+        vector_repos = set()
+        if data and data.get("metadatas"):
+            for meta in data["metadatas"]:
+                if meta and "repo" in meta:
+                    vector_repos.add(meta["repo"])
+
+        graph_repos = set()
+        graph_client = Neo4jClient()
+        try:
+            await graph_client.connect()
+            records = await graph_client.execute_query("MATCH (f:File) RETURN DISTINCT f.repo_id AS repo")
+            for r in records:
+                if r.get("repo"):
+                    graph_repos.add(r["repo"])
+        except Exception:
+            pass
+        finally:
+            await graph_client.close()
+
+        all_repos = sorted(list(vector_repos.union(graph_repos)))
+        if not all_repos:
+            all_repos = ["final-year-project", "demo-mern", "integration-test-mern"]
+
+        return {
+            "repos": all_repos,
+            "vector_count": vector_client.collection.count(),
+            "graph_repos": list(graph_repos),
+        }
+    except Exception as e:
+        return {"repos": ["final-year-project", "demo-mern"], "error": str(e)}
+
+
+@app.post("/api/ingest")
+async def ingest_repository(req: IngestRequest):
+    """Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB."""
+    repo_path = Path(req.repo_dir)
+    if not repo_path.exists():
+        raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
+
+    graph_client = Neo4jClient()
+    await graph_client.connect()
+    vector_client = VectorKBClient()
+    try:
+        result = await run_init_job(
+            repo_id=req.repo_id,
+            branch=req.branch or "main",
+            repo_dir=repo_path,
+            client=graph_client,
+            vector_client=vector_client,
+        )
+        return {
+            "status": "success",
+            "repo_id": req.repo_id,
+            "symbols_parsed": result.total_symbols,
+            "files_parsed": result.total_files,
+            "packages": result.total_packages,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+@app.post("/api/chat/stream")
+async def agent_chat_stream(req: ChatRequest):
+    """
+    Autonomous ReAct Agentic RAG Streaming Endpoint (SSE):
+    1. Agent runs iterative ReAct reasoning loop.
+    2. Streams thoughts, tool calls, tool responses, answer text deltas, and citations.
+    """
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+    except Exception:
+        pass
+
+    vector_client = VectorKBClient()
+    llm_client = DualLLMClient()
+    agent_loop = AutonomousAgentLoop(llm_client=llm_client)
+
+    async def event_generator():
+        try:
+            async for event in agent_loop.run_stream(
+                user_query=req.message,
+                repo_id=req.repo_id,
+                branch=req.branch or "main",
+                graph_client=graph_client,
+                vector_client=vector_client,
+            ):
+                yield event
+        finally:
+            try:
+                await graph_client.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def agent_chat_query(req: ChatRequest):
+    """
+    Autonomous Agentic RAG Endpoint:
+    1. LLM evaluates query and plans dynamic MCP tool calls.
+    2. Executes chosen tools (vector_search, hybrid_search, get_blast_radius, get_symbol_details, get_file_deps).
+    3. Streams tool steps trace to frontend visualizer.
+    4. Formulates cited sources.
+    5. Synthesizes final response using LLM.
+    """
+    total_start = time.perf_counter()
+    tool_steps: List[ToolStep] = []
+    citations: List[Citation] = []
+    citation_id_counter = 1
+    context_chunks = []
+
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+    except Exception:
+        pass
+
+    vector_client = VectorKBClient()
+    llm_client = DualLLMClient()
+
+    # Step 1: Agent plans dynamic tool calls
+    planned_calls = await llm_client.plan_tool_calls(user_query=req.message, repo_id=req.repo_id)
+
+    # Ensure vector search and hybrid search are included if no tools planned
+    has_vector_or_hybrid = any(c.get("tool_name") in ["hybrid_search", "vector_search"] for c in planned_calls)
+    if not has_vector_or_hybrid:
+        planned_calls.insert(0, {"tool_name": "vector_search", "args": {"query": req.message}})
+        planned_calls.insert(1, {"tool_name": "hybrid_search", "args": {"query": req.message}})
+
+    # Execute dynamic tool loop
+    for step_idx, call in enumerate(planned_calls, start=1):
+        t_name = call.get("tool_name", "vector_search")
+        t_args = call.get("args", {})
+        t_start = time.perf_counter()
+        t_raw = {}
+        t_title = t_name.replace("_", " ").title()
+        t_summary = ""
+
+        try:
+            if t_name == "vector_search":
+                t_title = "ChromaDB Semantic Vector Search"
+                q = t_args.get("query", req.message)
+                raw_str = tool_vector_search(vector_client, query_text=q, repo_id=req.repo_id, n_results=5)
+                t_raw = json.loads(raw_str)
+                hits = t_raw.get("results", [])
+                t_summary = f"Retrieved {len(hits)} semantic vector code passages from ChromaDB."
+
+                for hit in hits:
+                    meta = hit.get("metadata", {})
+                    text = hit.get("text", "")
+                    file_path = meta.get("file_path", meta.get("repo", "codebase"))
+                    sym_name = meta.get("symbol_name") or meta.get("name")
+                    start_l = meta.get("start_line")
+                    end_l = meta.get("end_line")
+                    line_str = f"{start_l}-{end_l}" if start_l and end_l else None
+
+                    cit = Citation(
+                        id=citation_id_counter,
+                        file_path=file_path,
+                        symbol=sym_name,
+                        lines=line_str,
+                        snippet=text[:300] + ("..." if len(text) > 300 else ""),
+                        source_type="vector",
+                        distance=round(hit.get("distance", 0.0), 4) if hit.get("distance") else None,
+                    )
+                    citations.append(cit)
+                    context_chunks.append(f"[{citation_id_counter}] Vector Hit - File: {file_path} (Symbol: {sym_name or 'N/A'})\n{text[:600]}")
+                    citation_id_counter += 1
+
+            elif t_name == "hybrid_search":
+                t_title = "Unified Vector & Graph Search"
+                q = t_args.get("query", req.message)
+                raw_str = await tool_hybrid_search(graph_client, vector_client, repo_id=req.repo_id, query_text=q, branch=req.branch or "main", n_results=5)
+                t_raw = json.loads(raw_str)
+                vec_hits = t_raw.get("vector_hits", [])
+                g_hits = t_raw.get("graph_hits", [])
+                t_summary = f"Retrieved {len(vec_hits)} vector hits and {len(g_hits)} Neo4j graph symbol hits."
+
+                for g in g_hits:
+                    if isinstance(g, dict):
+                        f_p = g.get("file_path", g.get("name", "knowledge-graph"))
+                        s_n = g.get("name") or g.get("qualified_name")
+                        cit = Citation(
+                            id=citation_id_counter,
+                            file_path=f_p,
+                            symbol=s_n,
+                            lines=f"{g.get('start_line', '')}-{g.get('end_line', '')}" if g.get('start_line') else None,
+                            snippet=f"Neo4j {g.get('kind', 'symbol')} Node: {s_n}\nDocstring: {g.get('docstring', 'None')}",
+                            source_type="graph",
+                        )
+                        citations.append(cit)
+                        citation_id_counter += 1
+
+            elif t_name == "get_blast_radius":
+                t_title = "Neo4j Downstream Ripple Blast Radius"
+                syms = t_args.get("changed_symbols", ["userService"])
+                raw_str = await tool_get_blast_radius(graph_client, repo_id=req.repo_id, changed_symbols=syms, branch=req.branch or "main")
+                t_raw = json.loads(raw_str)
+                risk = t_raw.get("risk_score", 0.0)
+                affected = t_raw.get("total_affected", 0)
+                t_summary = f"Calculated ripple effect risk score: {risk}. Total downstream affected symbols: {affected}."
+
+            elif t_name == "get_file_dependencies":
+                t_title = "Neo4j File Dependency Graph Traversal"
+                f_p = t_args.get("file_path", "userService.js")
+                raw_str = await tool_get_file_dependencies(graph_client, repo_id=req.repo_id, file_path=f_p, branch=req.branch or "main")
+                t_raw = json.loads(raw_str)
+                imp_by = len(t_raw.get("imported_by_files", []))
+                imp_in = len(t_raw.get("imports_files", []))
+                t_summary = f"File '{f_p}' imported by {imp_by} files; imports {imp_in} internal files."
+
+            elif t_name == "get_symbol_details":
+                t_title = "Neo4j Symbol & Call Graph Analysis"
+                q_name = t_args.get("qualified_name", "userService")
+                raw_str = await tool_get_symbol_details(graph_client, repo_id=req.repo_id, qualified_name=q_name, branch=req.branch or "main")
+                t_raw = json.loads(raw_str)
+                callers_cnt = len(t_raw.get("callers", []))
+                t_summary = f"Analyzed symbol '{q_name}': found {callers_cnt} caller node(s)."
+
+            elif t_name == "get_repo_structure":
+                t_title = "Neo4j Repository File Hierarchy"
+                raw_str = await tool_get_repo_structure(graph_client, repo_id=req.repo_id, branch=req.branch or "main")
+                t_raw = json.loads(raw_str)
+                files_cnt = len(t_raw.get("files", []))
+                t_summary = f"Retrieved structure for {files_cnt} indexed files in Neo4j."
+
+            else:
+                t_title = "Neo4j Fuzzy Symbol Search"
+                q = t_args.get("query", req.message)
+                raw_str = await tool_search_symbols(graph_client, repo_id=req.repo_id, query_str=q, branch=req.branch or "main")
+                t_raw = json.loads(raw_str)
+                t_summary = f"Found {len(t_raw)} matching graph symbols."
+
+        except Exception as e:
+            t_raw = {"error": str(e)}
+            t_summary = f"Tool execution error: {str(e)}"
+
+        t_latency = (time.perf_counter() - t_start) * 1000.0
+        tool_steps.append(
+            ToolStep(
+                id=f"step_{step_idx}_{t_name}",
+                tool_name=t_name,
+                title=t_title,
+                status="completed",
+                latency_ms=round(t_latency, 2),
+                args=t_args,
+                summary=t_summary,
+                raw_output=t_raw,
+            )
+        )
+
+    # Step 3: LLM Synthesis with Gemini / Groq
+    t_synth_start = time.perf_counter()
+    context_str = "\n\n".join(context_chunks) if context_chunks else "No specific vector passages retrieved."
+
+    system_prompt = (
+        "You are an expert Codebase AI Assistant for a software repository Knowledge Base. "
+        "Answer the user's question accurately using the provided code snippets and knowledge graph tool output context. "
+        "IMPORTANT: You MUST cite your sources in your answer using bracketed numbers like [1], [2] matching the provided reference IDs. "
+        "Format your answer cleanly with Markdown, including clear headings, bullet points, and code blocks where appropriate."
+    )
+
+    prompt = (
+        f"Repository: {req.repo_id} (branch: {req.branch or 'main'})\n"
+        f"User Query: {req.message}\n\n"
+        f"--- EXECUTED MCP TOOL RESULTS ---\n"
+        f"{json.dumps([s.raw_output for s in tool_steps], indent=2)[:3000]}\n\n"
+        f"--- RETRIEVED VECTOR KB CONTEXT ---\n"
+        f"{context_str[:2500]}\n\n"
+        f"Please provide a comprehensive answer with inline citations [1], [2], etc."
+    )
+
+    synthesis_response = await llm_client.run_orchestrator(prompt, system_prompt)
+    t_synth_latency = (time.perf_counter() - t_synth_start) * 1000.0
+
+    tool_steps.append(
+        ToolStep(
+            id=f"step_{len(tool_steps)+1}_llm_synthesis",
+            tool_name="dual_llm_synthesis",
+            title="Google Gemini Dual-LLM Orchestrator",
+            status="completed",
+            latency_ms=round(t_synth_latency, 2),
+            args={"model": "gemini-2.0-flash", "citations_count": len(citations)},
+            summary="Synthesized Knowledge Base context into a cited response.",
+            raw_output={"response_length": len(synthesis_response)},
+        )
+    )
+
+    total_latency = (time.perf_counter() - total_start) * 1000.0
+
+    return ChatResponse(
+        answer=synthesis_response,
+        citations=citations,
+        tool_steps=tool_steps,
+        repo_id=req.repo_id,
+        branch=req.branch or "main",
+        total_latency_ms=round(total_latency, 2),
+    )
