@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./dist --target=bun",
-    "start": "bun src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./api --target=bun",
+    "start": "bun api/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src/db/migrate.ts",
     "db:studio": "drizzle-kit studio"
