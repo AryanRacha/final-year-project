@@ -2,71 +2,160 @@
 
 @layer base {
   :root {
-    --background: #090d16;
-    --foreground: #f1f5f9;
+    --background: #000000;
+    --foreground: #ededed;
   }
 }
 
 body {
-  background-color: #090d16;
-  color: #f1f5f9;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #000000;
+  color: #ededed;
+  font-family:
+    var(--font-geist-sans),
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    "Open Sans",
+    "Helvetica Neue",
+    sans-serif;
   overflow-x: hidden;
+  letter-spacing: -0.011em;
 }
 
-/* Custom Scrollbars */
+/* Custom Vercel Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: #000000;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.8);
-  border-radius: 4px;
+  background: #27272a;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.8);
+  background: #3f3f46;
 }
 
-/* Glassmorphism panel styles */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* Glassmorphism & Vercel Panel Styles */
+.vercel-card {
+  background: #0a0a0a;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.glass-card {
-  background: rgba(30, 41, 59, 0.6);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.vercel-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Glowing Animations */
+.vercel-input {
+  background: #0a0a0a;
+  border: 1px solid #27272a;
+  color: #fafafa;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.vercel-input:focus {
+  outline: none;
+  border-color: #71717a;
+  box-shadow: 0 0 0 1px #71717a;
+}
+
+.vercel-button-primary {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.vercel-button-primary:hover {
+  background: #ccc;
+}
+
+.vercel-button-secondary {
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #fafafa;
+  transition: all 0.15s ease;
+}
+
+.vercel-button-secondary:hover {
+  background: #27272a;
+  border-color: #3f3f46;
+}
+
+/* Background Grids & Dots */
+.bg-dot-grid {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.12) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+.bg-line-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
 @keyframes pulseGlow {
-  0%, 100% {
-    box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
+    opacity: 0.8;
+    transform: scale(1.05);
   }
 }
 
-.pulse-glow {
-  animation: pulseGlow 3s infinite;
+.glow-beam {
+  animation: pulseGlow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes nodeActive {
-  0%, 100% {
-    border-color: rgba(99, 102, 241, 0.8);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
-  50% {
-    border-color: rgba(236, 72, 153, 0.9);
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.node-active {
-  animation: nodeActive 2s ease-in-out infinite;
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

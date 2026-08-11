@@ -1,15 +1,7 @@
-# api-service
+# API SERVICE
 
-To install dependencies:
+## TASKS
 
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+- [ ] Add User
+- [ ] Add Auth (TODO: Github / Google)
+- [ ] Add Github / Github Apps
