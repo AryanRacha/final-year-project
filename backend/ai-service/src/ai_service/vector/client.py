@@ -298,6 +298,27 @@ class VectorKBClient:
             }
         )
 
+    def _normalize_where(self, where: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not where:
+            return None
+
+        # If already formatted with operators, return as-is
+        for key in ("$and", "$or"):
+            if key in where:
+                return where
+
+        clean_items = []
+        for k, v in where.items():
+            if v is not None and v != "":
+                clean_items.append({k: v})
+
+        if not clean_items:
+            return None
+        if len(clean_items) == 1:
+            return clean_items[0]
+
+        return {"$and": clean_items}
+
     def query(
         self,
         query_texts: List[str],
@@ -305,14 +326,22 @@ class VectorKBClient:
         where: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Query the vector database with fallback filtering if target repo filter yields no hits.
+        Query the vector database with automatic $and formatting and fallback filtering.
         """
-        res = self.collection.query(
-            query_texts=query_texts,
-            n_results=n_results,
-            where=where
-        )
-        if where and res and res.get("documents") and len(res["documents"]) > 0:
+        parsed_where = self._normalize_where(where)
+        try:
+            res = self.collection.query(
+                query_texts=query_texts,
+                n_results=n_results,
+                where=parsed_where
+            )
+        except Exception:
+            res = self.collection.query(
+                query_texts=query_texts,
+                n_results=n_results,
+            )
+
+        if parsed_where and res and res.get("documents") and len(res["documents"]) > 0:
             if not res["documents"][0]:
                 res = self.collection.query(
                     query_texts=query_texts,

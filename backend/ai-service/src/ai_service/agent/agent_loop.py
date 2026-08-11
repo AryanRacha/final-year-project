@@ -49,13 +49,14 @@ class AutonomousAgentLoop:
             # Formulate conversation prompt history for LLM
             history_str = ""
             if observations:
-                history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS IN THIS REASONING LOOP:\n"
+                history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS & RETRIEVED CODE PASSAGES IN THIS REASONING LOOP:\n"
                 for obs in observations:
                     history_str += (
                         f"Step {obs['step']}:\n"
                         f"- Thought: {obs['thought']}\n"
                         f"- Tool Called: {obs['tool_name']}({json.dumps(obs['args'])})\n"
-                        f"- Result Snippet: {obs['output_summary']}\n\n"
+                        f"- Summary: {obs['output_summary']}\n"
+                        f"- Retrieved Payload / Code Content:\n{obs['raw'][:2500]}\n\n"
                     )
 
             prompt = (
@@ -168,7 +169,7 @@ class AutonomousAgentLoop:
                 "tool_name": tool_name,
                 "args": tool_args,
                 "output_summary": summary,
-                "raw": tool_raw_str[:1500],
+                "raw": tool_raw_str[:3000],
             })
 
             # Brief non-blocking delay for smooth UI streaming

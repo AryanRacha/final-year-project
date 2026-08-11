@@ -20,6 +20,18 @@ class InitResult:
     duration_seconds: float = 0.0
     errors: List[str] = field(default_factory=list)
 
+    @property
+    def total_symbols(self) -> int:
+        return self.symbols_count
+
+    @property
+    def total_files(self) -> int:
+        return self.vector_entries_count
+
+    @property
+    def total_packages(self) -> int:
+        return 0
+
 
 async def run_init_job(
     repo_id: str,
@@ -61,33 +73,47 @@ async def run_init_job(
         total_edges = 0
         total_vector_entries = 0
 
+        from ai_service.graph.writer import upsert_file_and_symbols
         vector_entries = []
         for pr in parse_results:
-            if pr.errors:
-                return InitResult(status="FAILED", errors=pr.errors)
-
-            s_count = await upsert_symbols(client, repo_id=repo_id, branch=branch, symbols=pr.symbols)
+            s_count = await upsert_file_and_symbols(
+                client, repo_id=repo_id, branch=branch, file_path=pr.file_path, language=pr.language, symbols=pr.symbols
+            )
             c_count = await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=pr.calls)
             i_count = await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=pr.imports)
 
-            total_symbols += s_count
+            total_symbols += len(pr.symbols)
             total_edges += (c_count + i_count)
 
-            for sym in pr.symbols:
+            if pr.symbols:
+                for sym in pr.symbols:
+                    vector_entries.append({
+                        "repo": repo_id,
+                        "branch": branch,
+                        "file_path": sym.file_path,
+                        "symbol": sym.name,
+                        "start_line": sym.start_line,
+                        "signature": sym.signature,
+                        "description": sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
+                        "code_body": sym.code_body,
+                        "commit_hash": commit_hash,
+                    })
+            else:
                 vector_entries.append({
                     "repo": repo_id,
                     "branch": branch,
-                    "file_path": sym.file_path,
-                    "symbol": sym.name,
-                    "start_line": sym.start_line,
-                    "signature": sym.signature,
-                    "description": sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
-                    "code_body": sym.code_body,
+                    "file_path": pr.file_path,
+                    "symbol": pr.file_path,
+                    "start_line": 1,
+                    "signature": f"File: {pr.file_path}",
+                    "description": f"Source file {pr.file_path} ({pr.language})",
+                    "code_body": f"File: {pr.file_path}\nLanguage: {pr.language}",
                     "commit_hash": commit_hash,
                 })
 
         # Dual-write into Vector KB in batch
-        vector_client.add_code_entries_batch(vector_entries)
+        if vector_entries:
+            vector_client.add_code_entries_batch(vector_entries)
         total_vector_entries = len(vector_entries)
 
         # Run import resolution pass to connect relative imports to actual File and Symbol nodes

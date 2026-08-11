@@ -18,7 +18,7 @@ class LanguageRegistry:
     _extractors: Dict[str, BaseExtractor] = {}
 
     @classmethod
-    def get_language_and_extractor(cls, extension: str) -> Optional[tuple[Language, BaseExtractor, LanguageType]]:
+    def get_language_and_extractor(cls, extension: str) -> Optional[tuple[Optional[Language], Optional[BaseExtractor], str]]:
         ext = extension.lower()
         if ext in (".py",):
             if "python" not in cls._languages:
@@ -26,7 +26,7 @@ class LanguageRegistry:
                 cls._extractors["python"] = PythonExtractor()
             return cls._languages["python"], cls._extractors["python"], "python"
 
-        elif ext in (".js",):
+        elif ext in (".js", ".mjs", ".cjs"):
             if "javascript" not in cls._languages:
                 cls._languages["javascript"] = Language(tsjs.language())
                 cls._extractors["javascript"] = MernExtractor(language="javascript")
@@ -38,7 +38,7 @@ class LanguageRegistry:
                 cls._extractors["jsx"] = MernExtractor(language="jsx")
             return cls._languages["jsx"], cls._extractors["jsx"], "jsx"
 
-        elif ext in (".ts",):
+        elif ext in (".ts", ".mts", ".cts"):
             if "typescript" not in cls._languages:
                 cls._languages["typescript"] = Language(tsts.language_typescript())
                 cls._extractors["typescript"] = MernExtractor(language="typescript")
@@ -49,6 +49,12 @@ class LanguageRegistry:
                 cls._languages["tsx"] = Language(tsts.language_tsx())
                 cls._extractors["tsx"] = MernExtractor(language="tsx")
             return cls._languages["tsx"], cls._extractors["tsx"], "tsx"
+
+        elif ext in (
+            ".json", ".yaml", ".yml", ".md", ".txt", ".html", ".css", ".sh",
+            ".toml", ".env", ".sql", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".hpp"
+        ):
+            return None, None, ext[1:]
 
         return None
 
@@ -64,41 +70,54 @@ class CodeParser:
             self._parsers[lang_name] = Parser(language)
         return self._parsers[lang_name]
 
-    def parse_file(self, file_path: str | Path) -> Optional[ParseResult]:
-        path = Path(file_path)
+    def parse_file(self, file_path: str | Path, relative_to_dir: Optional[str | Path] = None) -> Optional[ParseResult]:
+        path = Path(file_path).resolve()
         if not path.is_file():
             return None
+
+        if relative_to_dir:
+            try:
+                rel_file_path = path.relative_to(Path(relative_to_dir).resolve()).as_posix()
+            except ValueError:
+                rel_file_path = str(path).replace("\\", "/")
+        else:
+            rel_file_path = str(path).replace("\\", "/")
 
         lang_tuple = LanguageRegistry.get_language_and_extractor(path.suffix)
         if not lang_tuple:
             return None  # Unsupported file extension
 
         language, extractor, lang_type = lang_tuple
+        if language is None or extractor is None:
+            return ParseResult(file_path=rel_file_path, language=lang_type)
+
         parser = self._get_parser(lang_type, language)
 
         try:
             code_bytes = path.read_bytes()
             tree = parser.parse(code_bytes)
-            return extractor.extract(tree, code_bytes, str(path).replace("\\", "/"))
+            res = extractor.extract(tree, code_bytes, rel_file_path)
+            res.file_path = rel_file_path
+            return res
         except Exception as e:
             return ParseResult(
-                file_path=str(path).replace("\\", "/"),
+                file_path=rel_file_path,
                 language=lang_type,
                 errors=[f"Failed to parse file: {str(e)}"],
             )
 
     def parse_directory(self, dir_path: str | Path, ignore_dirs: Optional[set[str]] = None) -> list[ParseResult]:
-        root = Path(dir_path)
+        root = Path(dir_path).resolve()
         if not root.is_dir():
             return []
 
-        ignore = ignore_dirs or {".git", "node_modules", ".venv", "__pycache__", "build", "dist"}
+        ignore = ignore_dirs or {".git", "node_modules", ".venv", "__pycache__", "build", "dist", ".next", "out", "coverage"}
         results = []
 
         for p in root.rglob("*"):
             if p.is_file() and not any(part in ignore for part in p.parts):
-                res = self.parse_file(p)
-                if res and (res.symbols or res.calls or res.imports or res.errors):
+                res = self.parse_file(p, relative_to_dir=root)
+                if res:
                     results.append(res)
 
         return results

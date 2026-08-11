@@ -5,15 +5,15 @@ from ai_service.parsing.models import SymbolNode, CallEdge, ImportEdge
 
 async def upsert_file_and_symbols(client: Neo4jClient, repo_id: str, branch: str, file_path: str, language: str, symbols: List[SymbolNode]) -> int:
     """Create a File node and its Symbol nodes with DEFINES relationships."""
-    if not symbols:
-        return 0
-
     # 1. Create or merge the File node
     file_query = """
     MERGE (f:File {repo_id: $repo_id, branch: $branch, file_path: $file_path})
     SET f.language = $language
     """
     await client.execute_query(file_query, {"repo_id": repo_id, "branch": branch, "file_path": file_path, "language": language})
+
+    if not symbols:
+        return 1
 
     # 2. Create Symbol nodes with DEFINES edges from File
     sym_query = """

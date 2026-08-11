@@ -159,7 +159,15 @@ def tool_vector_search(
     if repo_id:
         where_clause["repo"] = repo_id
     if content_type:
-        where_clause["content_type"] = content_type
+        ct_lower = content_type.lower()
+        if "code" in ct_lower:
+            where_clause["content_type"] = "code"
+        elif "pr" in ct_lower or "pull" in ct_lower:
+            where_clause["content_type"] = "pr"
+        elif "commit" in ct_lower:
+            where_clause["content_type"] = "commit"
+        elif "issue" in ct_lower:
+            where_clause["content_type"] = "issue"
 
     res = vector_client.query(
         query_texts=[query_text],
@@ -208,28 +216,40 @@ async def execute_tool_by_name(
     """Dynamically execute an MCP tool by name with arguments."""
     try:
         if tool_name == "hybrid_search":
-            query = tool_args.get("query", tool_args.get("query_text", ""))
+            query = tool_args.get("query") or tool_args.get("query_text") or tool_args.get("q") or ""
             return await tool_hybrid_search(
                 graph_client, vector_client, repo_id=repo_id, query_text=query, branch=branch
             )
         elif tool_name == "vector_search":
-            query = tool_args.get("query", tool_args.get("query_text", ""))
+            query = tool_args.get("query") or tool_args.get("query_text") or tool_args.get("q") or ""
             ctype = tool_args.get("content_type")
             return tool_vector_search(
                 vector_client, query_text=query, repo_id=repo_id, content_type=ctype
             )
         elif tool_name == "get_symbol_details":
-            qname = tool_args.get("qualified_name", tool_args.get("symbol_name", ""))
+            qname = (
+                tool_args.get("qualified_name")
+                or tool_args.get("symbol_name")
+                or tool_args.get("name")
+                or tool_args.get("symbol")
+                or ""
+            )
             return await tool_get_symbol_details(
                 graph_client, repo_id=repo_id, qualified_name=qname, branch=branch
             )
         elif tool_name == "get_file_dependencies":
-            fpath = tool_args.get("file_path", "")
+            fpath = tool_args.get("file_path") or tool_args.get("file") or tool_args.get("path") or ""
             return await tool_get_file_dependencies(
                 graph_client, repo_id=repo_id, file_path=fpath, branch=branch
             )
         elif tool_name == "get_blast_radius":
-            syms = tool_args.get("changed_symbols", [])
+            syms = (
+                tool_args.get("changed_symbols")
+                or tool_args.get("symbols")
+                or tool_args.get("changed_symbol")
+                or tool_args.get("symbol")
+                or []
+            )
             if isinstance(syms, str):
                 syms = [syms]
             return await tool_get_blast_radius(
@@ -238,7 +258,13 @@ async def execute_tool_by_name(
         elif tool_name == "get_repo_structure":
             return await tool_get_repo_structure(graph_client, repo_id=repo_id, branch=branch)
         elif tool_name == "search_symbols":
-            query = tool_args.get("query", tool_args.get("query_str", ""))
+            query = (
+                tool_args.get("query")
+                or tool_args.get("query_str")
+                or tool_args.get("q")
+                or tool_args.get("symbol")
+                or ""
+            )
             return await tool_search_symbols(
                 graph_client, repo_id=repo_id, query_str=query, branch=branch
             )

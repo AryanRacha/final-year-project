@@ -161,9 +161,11 @@ async def ingest_repository(req: IngestRequest):
         return {
             "status": "success",
             "repo_id": req.repo_id,
-            "symbols_parsed": result.total_symbols,
-            "files_parsed": result.total_files,
-            "packages": result.total_packages,
+            "symbols_parsed": getattr(result, "symbols_count", getattr(result, "total_symbols", 0)),
+            "files_parsed": getattr(result, "vector_entries_count", getattr(result, "total_files", 0)),
+            "packages": getattr(result, "total_packages", 0),
+            "edges_count": getattr(result, "edges_count", 0),
+            "duration_seconds": getattr(result, "duration_seconds", 0.0),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
@@ -303,7 +305,15 @@ async def agent_chat_query(req: ChatRequest):
 
             elif t_name == "get_blast_radius":
                 t_title = "Neo4j Downstream Ripple Blast Radius"
-                syms = t_args.get("changed_symbols", ["userService"])
+                syms = (
+                    t_args.get("changed_symbols")
+                    or t_args.get("symbols")
+                    or t_args.get("changed_symbol")
+                    or t_args.get("symbol")
+                    or ["userService"]
+                )
+                if isinstance(syms, str):
+                    syms = [syms]
                 raw_str = await tool_get_blast_radius(graph_client, repo_id=req.repo_id, changed_symbols=syms, branch=req.branch or "main")
                 t_raw = json.loads(raw_str)
                 risk = t_raw.get("risk_score", 0.0)
@@ -312,7 +322,7 @@ async def agent_chat_query(req: ChatRequest):
 
             elif t_name == "get_file_dependencies":
                 t_title = "Neo4j File Dependency Graph Traversal"
-                f_p = t_args.get("file_path", "userService.js")
+                f_p = t_args.get("file_path") or t_args.get("file") or t_args.get("path") or "userService.js"
                 raw_str = await tool_get_file_dependencies(graph_client, repo_id=req.repo_id, file_path=f_p, branch=req.branch or "main")
                 t_raw = json.loads(raw_str)
                 imp_by = len(t_raw.get("imported_by_files", []))
@@ -321,7 +331,13 @@ async def agent_chat_query(req: ChatRequest):
 
             elif t_name == "get_symbol_details":
                 t_title = "Neo4j Symbol & Call Graph Analysis"
-                q_name = t_args.get("qualified_name", "userService")
+                q_name = (
+                    t_args.get("qualified_name")
+                    or t_args.get("symbol_name")
+                    or t_args.get("name")
+                    or t_args.get("symbol")
+                    or "userService"
+                )
                 raw_str = await tool_get_symbol_details(graph_client, repo_id=req.repo_id, qualified_name=q_name, branch=req.branch or "main")
                 t_raw = json.loads(raw_str)
                 callers_cnt = len(t_raw.get("callers", []))
@@ -336,7 +352,13 @@ async def agent_chat_query(req: ChatRequest):
 
             else:
                 t_title = "Neo4j Fuzzy Symbol Search"
-                q = t_args.get("query", req.message)
+                q = (
+                    t_args.get("query")
+                    or t_args.get("query_str")
+                    or t_args.get("q")
+                    or t_args.get("symbol")
+                    or req.message
+                )
                 raw_str = await tool_search_symbols(graph_client, repo_id=req.repo_id, query_str=q, branch=req.branch or "main")
                 t_raw = json.loads(raw_str)
                 t_summary = f"Found {len(t_raw)} matching graph symbols."
