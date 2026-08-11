@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import authRouter from "@/modules/auth/auth.routes";
-import githubRouter from "@/modules/github/github.routes";
+import authRouter from "../../modules/auth/auth.routes";
+import githubRouter from "../../modules/github/github.routes";
 
 const v1Router = new Hono();
 

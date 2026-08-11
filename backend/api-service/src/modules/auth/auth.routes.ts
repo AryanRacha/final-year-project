@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import {
   authMiddleware,
   type AuthContextVariables,
-} from "@/middlewares/auth.middleware";
+} from "../../middlewares/auth.middleware";
 import {
   getOAuthAuthorizeUrl,
   handleCallback,
-} from "@/modules/auth/auth.service";
-import { env } from "@/configs/env";
+} from "./auth.service";
+import { env } from "../../configs/env";
 
 const authRouter = new Hono<{ Variables: AuthContextVariables }>();
 

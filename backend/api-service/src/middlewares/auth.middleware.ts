@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
-import { verifySessionToken, getUserById } from "@/modules/auth/auth.service";
-import type { User } from "@/db/schema";
+import { verifySessionToken, getUserById } from "../modules/auth/auth.service";
+import type { User } from "../db/schema";
 
 export interface AuthContextVariables {
   user: User;

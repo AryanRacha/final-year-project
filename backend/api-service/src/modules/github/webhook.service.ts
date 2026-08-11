@@ -1,12 +1,12 @@
 import { Webhooks } from "@octokit/webhooks";
 import { eq, and } from "drizzle-orm";
-import { env } from "@/configs/env";
-import { db } from "@/db";
+import { env } from "../../configs/env";
+import { db } from "../../db";
 import {
   githubInstallations,
   connectedRepositories,
-} from "@/db/schema";
-import { getUserByGithubId } from "@/modules/auth/auth.service";
+} from "../../db/schema";
+import { getUserByGithubId } from "../auth/auth.service";
 
 const webhooks = new Webhooks({ secret: env.GITHUB_WEBHOOK_SECRET });
 

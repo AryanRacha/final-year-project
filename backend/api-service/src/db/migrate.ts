@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { migrate } from "drizzle-orm/neon-http/migrator";
-import { env } from "@/configs/env";
+import { env } from "../configs/env";
 
 async function main() {
   console.log("⏳ Running migrations on Neon database...");

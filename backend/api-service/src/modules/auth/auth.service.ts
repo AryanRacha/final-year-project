@@ -1,8 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
-import { env } from "@/configs/env";
-import { db } from "@/db";
-import { users, type User } from "@/db/schema";
+import { env } from "../../configs/env";
+import { db } from "../../db";
+import { users, type User } from "../../db/schema";
 
 const jwtSecret = new TextEncoder().encode(env.JWT_SECRET);
 

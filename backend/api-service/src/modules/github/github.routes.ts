@@ -3,21 +3,21 @@ import { eq, and } from "drizzle-orm";
 import {
   authMiddleware,
   type AuthContextVariables,
-} from "@/middlewares/auth.middleware";
+} from "../../middlewares/auth.middleware";
 import {
   getAppInstallationUrl,
   syncInstallationRepositories,
-} from "@/modules/github/github-app.service";
+} from "./github-app.service";
 import {
   verifySignature,
   handleEvent,
-} from "@/modules/github/webhook.service";
-import { db } from "@/db";
+} from "./webhook.service";
+import { db } from "../../db";
 import {
   githubInstallations,
   connectedRepositories,
-} from "@/db/schema";
-import { env } from "@/configs/env";
+} from "../../db/schema";
+import { env } from "../../configs/env";
 
 const githubRouter = new Hono<{ Variables: AuthContextVariables }>();
 

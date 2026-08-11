@@ -1,12 +1,12 @@
 import { App } from "octokit";
 import { eq } from "drizzle-orm";
-import { env } from "@/configs/env";
-import { db } from "@/db";
+import { env } from "../../configs/env";
+import { db } from "../../db";
 import {
   githubInstallations,
   connectedRepositories,
   type ConnectedRepository,
-} from "@/db/schema";
+} from "../../db/schema";
 
 let octokitApp: App | null = null;
 
