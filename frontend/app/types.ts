@@ -4,16 +4,15 @@ export interface Citation {
   symbol?: string | null;
   lines?: string | null;
   snippet: string;
-  source_type: 'vector' | 'graph';
+  source_type: "vector" | "graph";
   distance?: number | null;
 }
 
 export interface ToolStep {
   id: string;
-  step_index?: number;
   tool_name: string;
   title: string;
-  status: 'completed' | 'failed' | 'running';
+  status: "completed" | "failed" | "running";
   latency_ms: number;
   args: Record<string, any>;
   summary: string;
@@ -22,14 +21,12 @@ export interface ToolStep {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
   citations?: Citation[];
   tool_steps?: ToolStep[];
-  thoughts?: string[];
   total_latency_ms?: number;
-  isStreaming?: boolean;
 }
 
 export interface RepoInfo {
@@ -37,4 +34,3 @@ export interface RepoInfo {
   vector_count: number;
   graph_repos: string[];
 }
-
