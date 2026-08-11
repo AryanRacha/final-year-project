@@ -62,9 +62,12 @@ async def run_init_job(
         total_vector_entries = 0
 
         vector_entries = []
+        all_errors = []
         for pr in parse_results:
             if pr.errors:
-                return InitResult(status="FAILED", errors=pr.errors)
+                all_errors.extend(pr.errors)
+                # Continue processing symbols and edges if any, despite some errors
+
 
             s_count = await upsert_symbols(client, repo_id=repo_id, branch=branch, symbols=pr.symbols)
             c_count = await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=pr.calls)
@@ -101,6 +104,7 @@ async def run_init_job(
             edges_count=total_edges,
             vector_entries_count=total_vector_entries,
             duration_seconds=duration,
+            errors=all_errors,
         )
     except Exception as e:
         return InitResult(status="ERROR", errors=[str(e)])

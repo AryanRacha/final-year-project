@@ -33,7 +33,10 @@ export default function Home() {
   const [activeLatency, setActiveLatency] = useState<number | undefined>(undefined);
 
   const [isIngestModalOpen, setIsIngestModalOpen] = useState<boolean>(false);
+  const [ingestType, setIngestType] = useState<'local' | 'github'>('local');
   const [ingestPath, setIngestPath] = useState<string>('');
+  const [githubUrl, setGithubUrl] = useState<string>('');
+  const [githubToken, setGithubToken] = useState<string>('');
   const [ingestRepoId, setIngestRepoId] = useState<string>('');
   const [isIngesting, setIsIngesting] = useState<boolean>(false);
 
@@ -227,7 +230,9 @@ export default function Home() {
   };
 
   const handleIngestRepo = async () => {
-    if (!ingestPath.trim() || !ingestRepoId.trim()) return;
+    if (!ingestRepoId.trim()) return;
+    if (ingestType === 'local' && !ingestPath.trim()) return;
+    if (ingestType === 'github' && !githubUrl.trim()) return;
     setIsIngesting(true);
     try {
       const res = await fetch('http://127.0.0.1:8000/api/ingest', {
@@ -235,8 +240,10 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo_id: ingestRepoId,
-          repo_dir: ingestPath,
-          branch: 'main',
+          repo_dir: ingestType === 'local' ? ingestPath : undefined,
+          github_url: ingestType === 'github' ? githubUrl : undefined,
+          github_token: ingestType === 'github' ? githubToken : undefined,
+          branch: undefined,
         }),
       });
 
@@ -481,6 +488,21 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-3 text-xs">
+              <div className="flex gap-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button 
+                  onClick={() => setIngestType('local')}
+                  className={`flex-1 py-1.5 rounded-md text-center transition-colors ${ingestType === 'local' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Local Directory
+                </button>
+                <button 
+                  onClick={() => setIngestType('github')}
+                  className={`flex-1 py-1.5 rounded-md text-center transition-colors ${ingestType === 'github' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  GitHub Repository
+                </button>
+              </div>
+
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Repository ID:</label>
                 <input
@@ -492,16 +514,41 @@ export default function Home() {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Local Directory Path:</label>
-                <input
-                  type="text"
-                  value={ingestPath}
-                  onChange={(e) => setIngestPath(e.target.value)}
-                  placeholder="e.g. d:\DOCS\VIT Ebooks\Final Year Project\final-year-project\backend\ai-service"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+              {ingestType === 'local' ? (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Local Directory Path:</label>
+                  <input
+                    type="text"
+                    value={ingestPath}
+                    onChange={(e) => setIngestPath(e.target.value)}
+                    placeholder="e.g. d:\DOCS\VIT Ebooks\Final Year Project\final-year-project\backend\ai-service"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">GitHub Clone URL:</label>
+                    <input
+                      type="text"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      placeholder="e.g. https://github.com/user/repo.git"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">GitHub PAT Token (Optional):</label>
+                    <input
+                      type="password"
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder="e.g. ghp_..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
@@ -513,7 +560,7 @@ export default function Home() {
               </button>
               <button
                 onClick={handleIngestRepo}
-                disabled={isIngesting || !ingestPath || !ingestRepoId}
+                disabled={isIngesting || !ingestRepoId || (ingestType === 'local' ? !ingestPath : !githubUrl)}
                 className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5"
               >
                 {isIngesting ? (

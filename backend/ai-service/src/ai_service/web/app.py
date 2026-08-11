@@ -92,8 +92,10 @@ class ChatResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     repo_id: str
-    repo_dir: str
-    branch: Optional[str] = "main"
+    repo_dir: Optional[str] = None
+    github_url: Optional[str] = None
+    github_token: Optional[str] = None
+    branch: Optional[str] = None
 
 
 @app.get("/api/health")
@@ -143,28 +145,59 @@ async def list_repositories():
 @app.post("/api/ingest")
 async def ingest_repository(req: IngestRequest):
     """Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB."""
-    repo_path = Path(req.repo_dir)
-    if not repo_path.exists():
-        raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
-
     graph_client = Neo4jClient()
     await graph_client.connect()
     vector_client = VectorKBClient()
     try:
+        if req.github_url:
+            from ai_service.repo.cloner import clone_repo
+            import tempfile
+            import shutil
+            import stat
+            import os
+            
+            def remove_readonly(func, path, excinfo):
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+                
+            repo_dir = Path(tempfile.gettempdir()) / "ai_repos" / req.repo_id
+            if repo_dir.exists():
+                shutil.rmtree(repo_dir, onerror=remove_readonly)
+            repo_path = clone_repo(req.github_url, req.github_token, repo_dir, req.branch)
+            try:
+                from git import Repo
+                git_repo = Repo(repo_path)
+                cloned_branch = git_repo.active_branch.name
+                git_repo.close()
+            except Exception:
+                cloned_branch = req.branch or "main"
+        else:
+            if not req.repo_dir:
+                raise HTTPException(status_code=400, detail="Must provide repo_dir or github_url")
+            repo_path = Path(req.repo_dir)
+            if not repo_path.exists():
+                raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
+            cloned_branch = req.branch or "main"
+
         result = await run_init_job(
             repo_id=req.repo_id,
-            branch=req.branch or "main",
+            branch=cloned_branch,
             repo_dir=repo_path,
             client=graph_client,
             vector_client=vector_client,
         )
+        if result.status == "FAILED" or result.status == "ERROR":
+            raise HTTPException(status_code=500, detail=f"Ingestion errors: {result.errors}")
+
         return {
             "status": "success",
             "repo_id": req.repo_id,
-            "symbols_parsed": result.total_symbols,
-            "files_parsed": result.total_files,
-            "packages": result.total_packages,
+            "symbols_parsed": getattr(result, "symbols_count", 0),
+            "files_parsed": getattr(result, "vector_entries_count", 0),  # approximation for frontend
+            "packages": 0,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 @app.post("/api/chat/stream")

@@ -1,17 +1,9 @@
-from fastapi import FastAPI
+from src.ai_service.web.app import app
 from src.routes import jobs
-import chromadb
-from neo4j import GraphDatabase
 
-app = FastAPI(title="AI Service Python Orchestrator")
-
+# Include the control plane webhooks router
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
-@app.on_event("startup")
-async def startup_event():
-    # Initialize ChromaDB and Neo4j connections here
-    print("Starting AI Service...")
-
-@app.get("/")
-def read_root():
-    return {"message": "Hello from ai-service!"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
