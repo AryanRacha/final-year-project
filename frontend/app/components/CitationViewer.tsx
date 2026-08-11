@@ -41,7 +41,7 @@ export const CitationViewer: React.FC<CitationViewerProps> = ({
             <span className="font-bold text-white bg-zinc-800 px-1.5 py-0.5 rounded text-[10px]">
               [{cit.id}]
             </span>
-            <span className="truncate max-w-[180px] text-[11px] text-zinc-200">
+            <span className="truncate max-w-45 text-[11px] text-zinc-200">
               {cit.file_path.split("/").pop()}
             </span>
             {cit.lines && (

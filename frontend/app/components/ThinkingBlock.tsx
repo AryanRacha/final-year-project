@@ -129,7 +129,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
           {/* Timeline Execution Steps */}
           {toolSteps.length > 0 && (
-            <div className="relative pl-3 space-y-3 before:absolute before:left-4 before:top-2 before:bottom-2 before:w-[1px] before:bg-zinc-800">
+            <div className="relative pl-3 space-y-3 before:absolute before:left-4 before:top-2 before:bottom-2 before:w-px before:bg-zinc-800">
               {toolSteps.map((step) => {
                 const isExpanded = expandedStepId === step.id;
                 return (

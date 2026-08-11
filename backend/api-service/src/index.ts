@@ -64,9 +64,4 @@ app.notFound((c) => {
 // Server Export
 // ---------------------------------------------------------------------------
 
-export { app };
-
-export default {
-  port: Number(env.PORT),
-  fetch: app.fetch,
-};
+export default app;

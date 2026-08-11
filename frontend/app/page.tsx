@@ -70,7 +70,7 @@ Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white overflow-x-hidden">
       {/* Top Background Gradient Effect */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[500px] bg-gradient-to-b from-zinc-800/20 via-zinc-900/10 to-transparent blur-3xl pointer-events-none rounded-full" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-125 bg-linear-to-b from-zinc-800/20 via-zinc-900/10 to-transparent blur-3xl pointer-events-none rounded-full" />
       <div className="absolute inset-0 bg-dot-grid opacity-20 pointer-events-none" />
 
       {/* Vercel Header Bar */}
@@ -162,7 +162,7 @@ Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
         {/* Hero Title */}
         <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-6">
           The Intelligence Layer for <br />
-          <span className="bg-gradient-to-r from-white via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-white via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
             Multi-Repo Projects
           </span>
         </h1>
@@ -401,7 +401,7 @@ Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
 
       {/* CTA Banner */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-16">
-        <div className="rounded-3xl bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 p-10 md:p-14 text-center space-y-6 shadow-2xl">
+        <div className="rounded-3xl bg-linear-to-b from-zinc-900 to-black border border-zinc-800 p-10 md:p-14 text-center space-y-6 shadow-2xl">
           <h2 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
             Ready to secure your multi-repo pipeline?
           </h2>

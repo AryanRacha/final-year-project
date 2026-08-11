@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
-import { ChatMessage, ToolStep, Citation, RepoInfo } from '../types';
-import { ToolVisualizer } from '../components/ToolVisualizer';
-import { CitationViewer } from '../components/CitationViewer';
-import { ThinkingBlock } from '../components/ThinkingBlock';
+import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
+import { ChatMessage, ToolStep, Citation, RepoInfo } from "../types";
+import { ToolVisualizer } from "../components/ToolVisualizer";
+import { CitationViewer } from "../components/CitationViewer";
+import { ThinkingBlock } from "../components/ThinkingBlock";
 import {
   Bot,
   User,
@@ -28,21 +28,27 @@ import {
   LayoutDashboard,
   ExternalLink,
   Activity,
-} from 'lucide-react';
+} from "lucide-react";
 
 export default function DashboardPage() {
   const { user, logout, isAuthenticated } = useAuth();
-  const [repos, setRepos] = useState<string[]>(['final-year-project', 'demo-mern']);
-  const [selectedRepo, setSelectedRepo] = useState<string>('final-year-project');
+  const [repos, setRepos] = useState<string[]>([
+    "final-year-project",
+    "demo-mern",
+  ]);
+  const [selectedRepo, setSelectedRepo] =
+    useState<string>("final-year-project");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState<string>('');
+  const [inputMessage, setInputMessage] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeToolSteps, setActiveToolSteps] = useState<ToolStep[]>([]);
-  const [activeLatency, setActiveLatency] = useState<number | undefined>(undefined);
+  const [activeLatency, setActiveLatency] = useState<number | undefined>(
+    undefined,
+  );
 
   const [isIngestModalOpen, setIsIngestModalOpen] = useState<boolean>(false);
-  const [ingestPath, setIngestPath] = useState<string>('');
-  const [ingestRepoId, setIngestRepoId] = useState<string>('');
+  const [ingestPath, setIngestPath] = useState<string>("");
+  const [ingestRepoId, setIngestRepoId] = useState<string>("");
   const [isIngesting, setIsIngesting] = useState<boolean>(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
 
@@ -55,12 +61,12 @@ export default function DashboardPage() {
 
   // Auto-scroll chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   const fetchRepos = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/repos');
+      const res = await fetch("http://127.0.0.1:8000/api/repos");
       if (res.ok) {
         const data: RepoInfo = await res.json();
         if (data.repos && data.repos.length > 0) {
@@ -71,7 +77,7 @@ export default function DashboardPage() {
         }
       }
     } catch (e) {
-      console.warn('Backend server not reachable on load:', e);
+      console.warn("Backend server not reachable on load:", e);
     }
   };
 
@@ -81,17 +87,23 @@ export default function DashboardPage() {
 
     const userMsg: ChatMessage = {
       id: `user_${Date.now()}`,
-      role: 'user',
+      role: "user",
       content: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     };
 
     const assistantMsgId = `ast_${Date.now()}`;
     const initialAssistantMsg: ChatMessage = {
       id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       thoughts: [],
       tool_steps: [],
       citations: [],
@@ -99,19 +111,19 @@ export default function DashboardPage() {
     };
 
     setMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
-    if (!textToSend) setInputMessage('');
+    if (!textToSend) setInputMessage("");
     setIsLoading(true);
     setActiveToolSteps([]);
     setActiveLatency(undefined);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("http://127.0.0.1:8000/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repo_id: selectedRepo,
           message: query,
-          branch: 'main',
+          branch: "main",
         }),
       });
 
@@ -120,20 +132,20 @@ export default function DashboardPage() {
       }
 
       const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
+          if (!trimmed.startsWith("data: ")) continue;
           const jsonStr = trimmed.slice(6);
           try {
             const event = JSON.parse(jsonStr);
@@ -149,21 +161,26 @@ export default function DashboardPage() {
                 let updatedLatency = msg.total_latency_ms;
                 let isStreaming = msg.isStreaming;
 
-                if (event.type === 'thought') {
-                  if (event.content && !updatedThoughts.includes(event.content)) {
+                if (event.type === "thought") {
+                  if (
+                    event.content &&
+                    !updatedThoughts.includes(event.content)
+                  ) {
                     updatedThoughts.push(event.content);
                   }
-                } else if (event.type === 'tool_start') {
-                  const existingIdx = updatedSteps.findIndex((s) => s.id === event.step_id);
+                } else if (event.type === "tool_start") {
+                  const existingIdx = updatedSteps.findIndex(
+                    (s) => s.id === event.step_id,
+                  );
                   const stepObj: ToolStep = {
                     id: event.step_id,
                     step_index: event.step_index,
                     tool_name: event.tool_name,
                     title: event.title,
-                    status: 'running',
+                    status: "running",
                     latency_ms: 0,
                     args: event.args || {},
-                    summary: 'Executing tool...',
+                    summary: "Executing tool...",
                     raw_output: null,
                   };
 
@@ -173,17 +190,19 @@ export default function DashboardPage() {
                     updatedSteps.push(stepObj);
                   }
                   setActiveToolSteps([...updatedSteps]);
-                } else if (event.type === 'tool_end') {
-                  const existingIdx = updatedSteps.findIndex((s) => s.id === event.step_id);
+                } else if (event.type === "tool_end") {
+                  const existingIdx = updatedSteps.findIndex(
+                    (s) => s.id === event.step_id,
+                  );
                   const stepObj: ToolStep = {
                     id: event.step_id,
                     step_index: event.step_index,
                     tool_name: event.tool_name,
                     title: event.title,
-                    status: 'completed',
+                    status: "completed",
                     latency_ms: event.latency_ms || 0,
                     args: event.args || {},
-                    summary: event.summary || '',
+                    summary: event.summary || "",
                     raw_output: event.raw_output || {},
                   };
 
@@ -193,11 +212,11 @@ export default function DashboardPage() {
                     updatedSteps.push(stepObj);
                   }
                   setActiveToolSteps([...updatedSteps]);
-                } else if (event.type === 'answer_delta') {
+                } else if (event.type === "answer_delta") {
                   updatedContent += event.delta;
-                } else if (event.type === 'citations') {
+                } else if (event.type === "citations") {
                   updatedCitations = event.citations || [];
-                } else if (event.type === 'done') {
+                } else if (event.type === "done") {
                   isStreaming = false;
                   updatedLatency = event.total_latency_ms;
                   setActiveLatency(event.total_latency_ms);
@@ -212,10 +231,10 @@ export default function DashboardPage() {
                   total_latency_ms: updatedLatency,
                   isStreaming,
                 };
-              })
+              }),
             );
           } catch (e) {
-            console.warn('Failed to parse SSE payload:', e);
+            console.warn("Failed to parse SSE payload:", e);
           }
         }
       }
@@ -225,10 +244,10 @@ export default function DashboardPage() {
           if (msg.id !== assistantMsgId) return msg;
           return {
             ...msg,
-            content: `⚠️ Failed to query Knowledge Base: ${err.message || 'Make sure backend services are running'}`,
+            content: `⚠️ Failed to query Knowledge Base: ${err.message || "Make sure backend services are running"}`,
             isStreaming: false,
           };
-        })
+        }),
       );
     } finally {
       setIsLoading(false);
@@ -239,25 +258,27 @@ export default function DashboardPage() {
     if (!ingestPath.trim() || !ingestRepoId.trim()) return;
     setIsIngesting(true);
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("http://127.0.0.1:8000/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repo_id: ingestRepoId,
           repo_dir: ingestPath,
-          branch: 'main',
+          branch: "main",
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        alert(`Successfully ingested repository '${ingestRepoId}'! Parsed ${data.files_parsed} files and ${data.symbols_parsed} symbols.`);
+        alert(
+          `Successfully ingested repository '${ingestRepoId}'! Parsed ${data.files_parsed} files and ${data.symbols_parsed} symbols.`,
+        );
         setIsIngestModalOpen(false);
         fetchRepos();
         setSelectedRepo(ingestRepoId);
       } else {
         const err = await res.json();
-        alert(`Ingestion failed: ${err.detail || 'Error'}`);
+        alert(`Ingestion failed: ${err.detail || "Error"}`);
       }
     } catch (e: any) {
       alert(`Ingestion request failed: ${e.message}`);
@@ -267,10 +288,10 @@ export default function DashboardPage() {
   };
 
   const samplePrompts = [
-    'How does hybrid search work in this repository?',
-    'What functions and dependencies exist in reviewer.py?',
-    'Where is Neo4j client initialized and used?',
-    'Show blast radius if I modify the Auth token verification logic.',
+    "How does hybrid search work in this repository?",
+    "What functions and dependencies exist in reviewer.py?",
+    "Where is Neo4j client initialized and used?",
+    "Show blast radius if I modify the Auth token verification logic.",
   ];
 
   return (
@@ -283,7 +304,9 @@ export default function DashboardPage() {
             <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center font-bold text-xs font-mono group-hover:scale-105 transition-transform">
               S
             </div>
-            <span className="text-sm font-bold text-white tracking-tight">Sentinel</span>
+            <span className="text-sm font-bold text-white tracking-tight">
+              Sentinel
+            </span>
           </Link>
           <span className="text-zinc-600 font-mono text-sm">/</span>
 
@@ -342,16 +365,16 @@ export default function DashboardPage() {
                 {user.avatar_url ? (
                   <img
                     src={user.avatar_url}
-                    alt={user.username || 'User'}
+                    alt={user.username || "User"}
                     className="w-6 h-6 rounded-full border border-zinc-700"
                   />
                 ) : (
                   <div className="w-6 h-6 rounded-full bg-zinc-800 text-white text-[10px] font-bold flex items-center justify-center border border-zinc-700">
-                    {user.username ? user.username[0].toUpperCase() : 'U'}
+                    {user.username ? user.username[0].toUpperCase() : "U"}
                   </div>
                 )}
                 <span className="text-xs font-medium text-zinc-200 hidden md:inline">
-                  {user.username || user.email || 'Developer'}
+                  {user.username || user.email || "Developer"}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               </button>
@@ -359,8 +382,12 @@ export default function DashboardPage() {
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl py-1.5 z-50 text-xs font-sans">
                   <div className="px-3 py-2 border-b border-zinc-800">
-                    <p className="font-semibold text-white">{user.name || user.username || 'Authenticated User'}</p>
-                    <p className="text-[10px] text-zinc-500 font-mono truncate">{user.email || 'GitHub Session'}</p>
+                    <p className="font-semibold text-white">
+                      {user.name || user.username || "Authenticated User"}
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-mono truncate">
+                      {user.email || "GitHub Session"}
+                    </p>
                   </div>
                   <button
                     onClick={logout}
@@ -395,7 +422,9 @@ export default function DashboardPage() {
               <span className="text-zinc-600">•</span>
               <span className="text-emerald-400">branch: main</span>
             </div>
-            <span className="text-[11px] text-zinc-500">ReAct Autonomous Loop</span>
+            <span className="text-[11px] text-zinc-500">
+              ReAct Autonomous Loop
+            </span>
           </div>
 
           {/* Chat Messages Container */}
@@ -407,10 +436,15 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-white">
-                    Ask Sentinel about repository <span className="font-mono text-emerald-400">'{selectedRepo}'</span>
+                    Ask Sentinel about repository{" "}
+                    <span className="font-mono text-emerald-400">
+                      '{selectedRepo}'
+                    </span>
                   </h2>
                   <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                    The autonomous agent will search the Neo4j graph, query Chroma vector embeddings, and stream step-by-step reasoning traces.
+                    The autonomous agent will search the Neo4j graph, query
+                    Chroma vector embeddings, and stream step-by-step reasoning
+                    traces.
                   </p>
                 </div>
 
@@ -435,9 +469,9 @@ export default function DashboardPage() {
               messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  {msg.role === 'assistant' && (
+                  {msg.role === "assistant" && (
                     <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-1 font-mono font-bold text-xs">
                       S
                     </div>
@@ -445,18 +479,20 @@ export default function DashboardPage() {
 
                   <div
                     className={`max-w-3xl flex flex-col rounded-2xl p-4 text-xs leading-relaxed shadow-sm ${
-                      msg.role === 'user'
-                        ? 'bg-zinc-800 text-white rounded-br-none font-medium'
-                        : 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-bl-none'
+                      msg.role === "user"
+                        ? "bg-zinc-800 text-white rounded-br-none font-medium"
+                        : "bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-bl-none"
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1.5 opacity-60 font-mono text-[10px]">
-                      <span>{msg.role === 'user' ? 'You' : 'Sentinel Agent'}</span>
+                      <span>
+                        {msg.role === "user" ? "You" : "Sentinel Agent"}
+                      </span>
                       <span>{msg.timestamp}</span>
                     </div>
 
                     {/* Render Expandable Thinking Trace */}
-                    {msg.role === 'assistant' && (
+                    {msg.role === "assistant" && (
                       <ThinkingBlock
                         thoughts={msg.thoughts}
                         toolSteps={msg.tool_steps}
@@ -466,7 +502,9 @@ export default function DashboardPage() {
                     )}
 
                     {/* Assistant Response Content */}
-                    <div className="whitespace-pre-wrap font-sans text-xs md:text-sm mt-1">{msg.content}</div>
+                    <div className="whitespace-pre-wrap font-sans text-xs md:text-sm mt-1">
+                      {msg.content}
+                    </div>
 
                     {/* Citations section */}
                     {msg.citations && msg.citations.length > 0 && (
@@ -474,7 +512,7 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  {msg.role === 'user' && (
+                  {msg.role === "user" && (
                     <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0 mt-1">
                       <User className="w-3.5 h-3.5" />
                     </div>
@@ -544,7 +582,9 @@ export default function DashboardPage() {
 
             <div className="flex flex-col gap-3 text-xs">
               <div>
-                <label className="block text-zinc-300 font-semibold mb-1">Repository ID:</label>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  Repository ID:
+                </label>
                 <input
                   type="text"
                   value={ingestRepoId}
@@ -555,7 +595,9 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <label className="block text-zinc-300 font-semibold mb-1">Local Directory Path:</label>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  Local Directory Path:
+                </label>
                 <input
                   type="text"
                   value={ingestPath}
