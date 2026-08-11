@@ -101,6 +101,18 @@ class UnifiedKB:
         except Exception as e:
             pass
 
+        # Deduplicate graph hits by unique symbol identifier
+        unique_hits = []
+        seen_keys = set()
+        for hit in graph_hits:
+            key = hit.get("qualified_name") or hit.get("name") or hit.get("file_path")
+            if key and key not in seen_keys:
+                seen_keys.add(key)
+                unique_hits.append(hit)
+            elif not key:
+                unique_hits.append(hit)
+        graph_hits = unique_hits
+
         return {
             "query": query_text,
             "repo_id": repo_id,

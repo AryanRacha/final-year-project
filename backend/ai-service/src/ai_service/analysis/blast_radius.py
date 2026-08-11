@@ -49,9 +49,11 @@ async def compute_blast_radius(
         file_syms = await client.execute_query(file_sym_query, {"repo_id": repo_id, "branch": branch, "fp": item_clean})
         if file_syms:
             for s in file_syms:
-                if s.get("name"):
-                    expanded_target_symbols.append(s["name"])
-        else:
+                sym_identifier = s.get("name") or s.get("qualified_name")
+                if sym_identifier:
+                    expanded_target_symbols.append(sym_identifier)
+
+        if not expanded_target_symbols:
             sym_name = item_clean.split("::")[-1].split(".")[-1]
             expanded_target_symbols.append(sym_name)
 
