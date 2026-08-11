@@ -554,7 +554,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Right Panel: Tool Execution Pipeline Visualizer */}
-        <div className="w-96 md:w-[420px] shrink-0">
+        <div className="w-96 md:w-105 shrink-0">
           <ToolVisualizer
             toolSteps={activeToolSteps}
             totalLatencyMs={activeLatency}
