@@ -305,10 +305,18 @@ class VectorKBClient:
         where: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Query the vector database.
+        Query the vector database with fallback filtering if target repo filter yields no hits.
         """
-        return self.collection.query(
+        res = self.collection.query(
             query_texts=query_texts,
             n_results=n_results,
             where=where
         )
+        if where and res and res.get("documents") and len(res["documents"]) > 0:
+            if not res["documents"][0]:
+                res = self.collection.query(
+                    query_texts=query_texts,
+                    n_results=n_results,
+                )
+        return res
+

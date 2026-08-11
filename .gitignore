@@ -9,5 +9,6 @@
 /dataSources/
 /dataSources.local.xml
 .env
+chroma_db/
 .__pycache__
 .idea

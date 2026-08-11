@@ -1,3 +1,4 @@
+import re
 from typing import Any, Dict, List, Optional
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
@@ -35,7 +36,7 @@ class UnifiedKB:
         """
         Perform a hybrid search:
         1. Vector similarity search over ChromaDB code/PR/commit/issue embeddings.
-        2. Fuzzy symbol matching in Neo4j graph DB.
+        2. Intelligent token-based symbol and file matching in Neo4j graph DB.
         Returns a dictionary combining both vector and graph hits.
         """
         # 1. Vector similarity search
@@ -53,23 +54,58 @@ class UnifiedKB:
             for doc, meta, dist in zip(docs, metas, dists):
                 vector_hits.append({"document": doc, "metadata": meta, "distance": dist})
 
-        # 2. Graph symbol search
+        # 2. Tokenized Graph symbol and file search
+        stop_words = {
+            'use', 'the', 'graph', 'mcp', 'to', 'locate', 'me', 'which', 'nodes', 'noddes',
+            'will', 'directly', 'be', 'affected', 'from', 'editing', 'find', 'show', 'get',
+            'what', 'how', 'does', 'in', 'of', 'for', 'a', 'an', 'and', 'or', 'with', 'is', 'it'
+        }
+        words = re.findall(r'[a-zA-Z0-9_-]+', query_text.lower())
+        tokens = [w for w in words if w not in stop_words and len(w) > 2]
+        if len(tokens) >= 2:
+            tokens.append("".join(tokens))
+            tokens.append(tokens[0] + tokens[1].capitalize())
+
+        if not tokens:
+            tokens = [query_text.lower()]
+
+        # Query Cypher for symbols matching any token
         graph_query = """
-        MATCH (s:Symbol {repo_id: $repo_id, branch: $branch})
-        WHERE toLower(s.name) CONTAINS toLower($query_str) OR toLower(s.qualified_name) CONTAINS toLower($query_str)
+        MATCH (s:Symbol {repo_id: $repo_id})
+        WHERE ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
         RETURN properties(s) AS symbol
         LIMIT $limit
         """
-        graph_recs = await self.graph.execute_query(
-            graph_query,
-            {"repo_id": repo_id, "branch": branch, "query_str": query_text, "limit": n_results},
-        )
-        graph_hits = [r["symbol"] for r in graph_recs if "symbol" in r]
+        graph_hits = []
+        try:
+            graph_recs = await self.graph.execute_query(
+                graph_query,
+                {"repo_id": repo_id, "tokens": tokens, "limit": n_results},
+            )
+            graph_hits = [r["symbol"] for r in graph_recs if "symbol" in r]
+
+            # If symbol hits are fewer than limit, search File nodes
+            if len(graph_hits) < n_results:
+                file_query = """
+                MATCH (f:File {repo_id: $repo_id})
+                WHERE ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
+                RETURN {name: f.file_path, qualified_name: f.file_path, kind: "file", file_path: f.file_path, language: f.language} AS symbol
+                LIMIT $limit
+                """
+                file_recs = await self.graph.execute_query(
+                    file_query,
+                    {"repo_id": repo_id, "tokens": tokens, "limit": n_results - len(graph_hits)},
+                )
+                file_hits = [r["symbol"] for r in file_recs if "symbol" in r]
+                graph_hits.extend(file_hits)
+        except Exception as e:
+            pass
 
         return {
             "query": query_text,
             "repo_id": repo_id,
             "branch": branch,
+            "tokens_matched": tokens,
             "vector_hits": vector_hits,
             "graph_hits": graph_hits,
         }

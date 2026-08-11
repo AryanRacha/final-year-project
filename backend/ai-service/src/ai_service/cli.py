@@ -114,6 +114,16 @@ def mcp():
 
 
 @main.command()
+@click.option("--host", default="127.0.0.1", help="Host address to bind server.")
+@click.option("--port", default=8000, help="Port to bind server.")
+def serve(host: str, port: int):
+    """Start FastAPI HTTP server for Chat API & Agent Tool Visualizer backend."""
+    import uvicorn
+    uvicorn.run("ai_service.web.app:app", host=host, port=port, reload=True)
+
+
+
+@main.command()
 @click.option("--repo-dir", required=True, type=click.Path(exists=True), help="Path to target codebase.")
 @click.option("--output", default="kb_graph.html", help="Output HTML file path.")
 def visualize(repo_dir: str, output: str):
