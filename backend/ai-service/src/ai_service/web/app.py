@@ -26,6 +26,7 @@ from ai_service.mcp.tools import (
     tool_search_symbols,
 )
 from ai_service.agent.llm_client import DualLLMClient
+from ai_service.agent.agent_loop import AutonomousAgentLoop
 from ai_service.jobs.init_job import run_init_job
 from pathlib import Path
 
