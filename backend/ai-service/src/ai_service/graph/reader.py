@@ -3,10 +3,15 @@ from ai_service.graph.client import Neo4jClient
 
 
 async def get_symbol(client: Neo4jClient, repo_id: str, branch: str, qualified_name: str) -> Optional[Dict[str, Any]]:
-    """Fetch a single symbol node by qualified_name within repo_id."""
+    """Fetch a single symbol node by name or qualified_name within repo_id."""
     query = """
-    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch, qualified_name: $qualified_name})
+    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch})
+    WHERE s.qualified_name = $qualified_name 
+       OR s.name = $qualified_name 
+       OR toLower(s.name) = toLower($qualified_name)
+       OR toLower(s.qualified_name) CONTAINS toLower($qualified_name)
     RETURN properties(s) AS symbol
+    LIMIT 1
     """
     records = await client.execute_query(query, {"repo_id": repo_id, "branch": branch, "qualified_name": qualified_name})
     if records and records[0].get("symbol"):
@@ -19,7 +24,11 @@ async def get_dependents(
 ) -> List[Dict[str, Any]]:
     """Traverse the reverse call graph: find all callers depending on callee_name up to max_depth."""
     query = f"""
-    MATCH (callee:Symbol {{repo_id: $repo_id, branch: $branch, name: $callee_name}})
+    MATCH (callee:Symbol {{repo_id: $repo_id, branch: $branch}})
+    WHERE callee.name = $callee_name 
+       OR callee.qualified_name = $callee_name 
+       OR toLower(callee.name) = toLower($callee_name)
+       OR toLower(callee.qualified_name) CONTAINS toLower($callee_name)
     MATCH path = (caller:Symbol {{repo_id: $repo_id, branch: $branch}})-[:CALLS*1..{max_depth}]->(callee)
     RETURN DISTINCT caller.qualified_name AS qualified_name,
                     caller.name AS name,
@@ -37,7 +46,11 @@ async def get_dependencies(
 ) -> List[Dict[str, Any]]:
     """Traverse outgoing call graph: find all functions invoked by caller_qualified_name."""
     query = f"""
-    MATCH (caller:Symbol {{repo_id: $repo_id, branch: $branch, qualified_name: $caller_qualified_name}})
+    MATCH (caller:Symbol {{repo_id: $repo_id, branch: $branch}})
+    WHERE caller.qualified_name = $caller_qualified_name 
+       OR caller.name = $caller_qualified_name 
+       OR toLower(caller.name) = toLower($caller_qualified_name)
+       OR toLower(caller.qualified_name) CONTAINS toLower($caller_qualified_name)
     MATCH path = (caller)-[:CALLS*1..{max_depth}]->(callee:Symbol {{repo_id: $repo_id, branch: $branch}})
     RETURN DISTINCT callee.qualified_name AS qualified_name,
                     callee.name AS name,
@@ -59,3 +72,4 @@ async def get_all_symbols(client: Neo4jClient, repo_id: str, branch: str) -> Lis
     """
     records = await client.execute_query(query, {"repo_id": repo_id, "branch": branch})
     return [r["symbol"] for r in records if "symbol" in r]
+

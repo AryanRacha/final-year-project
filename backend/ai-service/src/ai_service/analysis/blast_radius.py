@@ -32,10 +32,30 @@ async def compute_blast_radius(
         return result
 
     seen_symbols = {}
+    expanded_target_symbols = []
 
-    for sym_qname in changed_symbols:
-        # Extract simple function/symbol name for Graph traversal
-        sym_name = sym_qname.split("::")[-1].split(".")[-1]
+    # Expand any file path inputs to their defined symbols
+    for item in changed_symbols:
+        item_clean = item.strip()
+        # Check if item matches a File node or has a file extension
+        file_sym_query = """
+        MATCH (f:File {repo_id: $repo_id, branch: $branch})
+        WHERE f.file_path = $fp 
+           OR toLower(f.file_path) ENDS WITH toLower('/' + $fp)
+           OR toLower(f.file_path) CONTAINS toLower($fp)
+        MATCH (f)-[:DEFINES]->(s:Symbol)
+        RETURN s.name AS name, s.qualified_name AS qualified_name
+        """
+        file_syms = await client.execute_query(file_sym_query, {"repo_id": repo_id, "branch": branch, "fp": item_clean})
+        if file_syms:
+            for s in file_syms:
+                if s.get("name"):
+                    expanded_target_symbols.append(s["name"])
+        else:
+            sym_name = item_clean.split("::")[-1].split(".")[-1]
+            expanded_target_symbols.append(sym_name)
+
+    for sym_name in set(expanded_target_symbols):
         dependents = await get_dependents(client, repo_id, branch, callee_name=sym_name, max_depth=max_depth)
 
         for dep in dependents:
@@ -62,3 +82,4 @@ async def compute_blast_radius(
     result.risk_score = round(score, 2)
 
     return result
+

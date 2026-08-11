@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, ToolStep, Citation, RepoInfo } from './types';
 import { ToolVisualizer } from './components/ToolVisualizer';
 import { CitationViewer } from './components/CitationViewer';
+import { ThinkingBlock } from './components/ThinkingBlock';
 import {
   Bot,
   User,
@@ -76,14 +77,26 @@ export default function Home() {
       timestamp: new Date().toLocaleTimeString(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const assistantMsgId = `ast_${Date.now()}`;
+    const initialAssistantMsg: ChatMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toLocaleTimeString(),
+      thoughts: [],
+      tool_steps: [],
+      citations: [],
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
     if (!textToSend) setInputMessage('');
     setIsLoading(true);
     setActiveToolSteps([]);
     setActiveLatency(undefined);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/chat', {
+      const res = await fetch('http://127.0.0.1:8000/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -93,33 +106,121 @@ export default function Home() {
         }),
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         throw new Error(`Server returned ${res.status}`);
       }
 
-      const data = await res.json();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-      const assistantMsg: ChatMessage = {
-        id: `ast_${Date.now()}`,
-        role: 'assistant',
-        content: data.answer,
-        timestamp: new Date().toLocaleTimeString(),
-        citations: data.citations || [],
-        tool_steps: data.tool_steps || [],
-        total_latency_ms: data.total_latency_ms,
-      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      setMessages((prev) => [...prev, assistantMsg]);
-      setActiveToolSteps(data.tool_steps || []);
-      setActiveLatency(data.total_latency_ms);
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const jsonStr = trimmed.slice(6);
+          try {
+            const event = JSON.parse(jsonStr);
+
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id !== assistantMsgId) return msg;
+
+                const updatedThoughts = [...(msg.thoughts || [])];
+                const updatedSteps = [...(msg.tool_steps || [])];
+                let updatedContent = msg.content;
+                let updatedCitations = msg.citations || [];
+                let updatedLatency = msg.total_latency_ms;
+                let isStreaming = msg.isStreaming;
+
+                if (event.type === 'thought') {
+                  if (event.content && !updatedThoughts.includes(event.content)) {
+                    updatedThoughts.push(event.content);
+                  }
+                } else if (event.type === 'tool_start') {
+                  const existingIdx = updatedSteps.findIndex((s) => s.id === event.step_id);
+                  const stepObj: ToolStep = {
+                    id: event.step_id,
+                    step_index: event.step_index,
+                    tool_name: event.tool_name,
+                    title: event.title,
+                    status: 'running',
+                    latency_ms: 0,
+                    args: event.args || {},
+                    summary: 'Executing tool...',
+                    raw_output: null,
+                  };
+
+                  if (existingIdx >= 0) {
+                    updatedSteps[existingIdx] = stepObj;
+                  } else {
+                    updatedSteps.push(stepObj);
+                  }
+                  setActiveToolSteps([...updatedSteps]);
+                } else if (event.type === 'tool_end') {
+                  const existingIdx = updatedSteps.findIndex((s) => s.id === event.step_id);
+                  const stepObj: ToolStep = {
+                    id: event.step_id,
+                    step_index: event.step_index,
+                    tool_name: event.tool_name,
+                    title: event.title,
+                    status: 'completed',
+                    latency_ms: event.latency_ms || 0,
+                    args: event.args || {},
+                    summary: event.summary || '',
+                    raw_output: event.raw_output || {},
+                  };
+
+                  if (existingIdx >= 0) {
+                    updatedSteps[existingIdx] = stepObj;
+                  } else {
+                    updatedSteps.push(stepObj);
+                  }
+                  setActiveToolSteps([...updatedSteps]);
+                } else if (event.type === 'answer_delta') {
+                  updatedContent += event.delta;
+                } else if (event.type === 'citations') {
+                  updatedCitations = event.citations || [];
+                } else if (event.type === 'done') {
+                  isStreaming = false;
+                  updatedLatency = event.total_latency_ms;
+                  setActiveLatency(event.total_latency_ms);
+                }
+
+                return {
+                  ...msg,
+                  thoughts: updatedThoughts,
+                  tool_steps: updatedSteps,
+                  content: updatedContent,
+                  citations: updatedCitations,
+                  total_latency_ms: updatedLatency,
+                  isStreaming,
+                };
+              })
+            );
+          } catch (e) {
+            console.warn('Failed to parse SSE payload:', e);
+          }
+        }
+      }
     } catch (err: any) {
-      const errorMsg: ChatMessage = {
-        id: `err_${Date.now()}`,
-        role: 'assistant',
-        content: `⚠️ Failed to query Knowledge Base: ${err.message || 'Make sure FastAPI server is running at http://127.0.0.1:8000'}`,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== assistantMsgId) return msg;
+          return {
+            ...msg,
+            content: `⚠️ Failed to query Knowledge Base: ${err.message || 'Make sure FastAPI server is running at http://127.0.0.1:8000'}`,
+            isStreaming: false,
+          };
+        })
+      );
     } finally {
       setIsLoading(false);
     }
@@ -175,11 +276,11 @@ export default function Home() {
             <h1 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2">
               CodeBase Knowledge Base AI Agent
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 font-mono text-indigo-300">
-                RAG + Visualizer
+                ReAct + Real-Time Stream
               </span>
             </h1>
             <p className="text-xs text-slate-400">
-              Interactive Repository QA & Real-Time Agent Tool Trace
+              Autonomous Iterative Agent Reasoning, Real-Time Thinking Trace & Citations
             </p>
           </div>
         </div>
@@ -200,7 +301,7 @@ export default function Home() {
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Gemini 2.5 Flash</span>
+              <span>Gemini 2.0 Flash</span>
             </div>
           </div>
 
@@ -247,7 +348,7 @@ export default function Home() {
                     Ask anything about repository <span className="text-indigo-400 font-mono">'{selectedRepo}'</span>
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    The AI agent will query Neo4j Knowledge Graph and Chroma Vector DB to return cited code answers.
+                    The autonomous agent will think, execute tools iteratively, and stream reasoning trace & cited answers in real time.
                   </p>
                 </div>
 
@@ -292,7 +393,18 @@ export default function Home() {
                       <span>{msg.timestamp}</span>
                     </div>
 
-                    <div className="whitespace-pre-wrap font-sans text-sm">{msg.content}</div>
+                    {/* Render Expandable Thinking & Step Execution UI Block */}
+                    {msg.role === 'assistant' && (
+                      <ThinkingBlock
+                        thoughts={msg.thoughts}
+                        toolSteps={msg.tool_steps}
+                        isStreaming={msg.isStreaming}
+                        totalLatencyMs={msg.total_latency_ms}
+                      />
+                    )}
+
+                    {/* Assistant Response Content */}
+                    <div className="whitespace-pre-wrap font-sans text-sm mt-1">{msg.content}</div>
 
                     {/* Citations section if assistant message */}
                     {msg.citations && msg.citations.length > 0 && (
@@ -309,17 +421,6 @@ export default function Home() {
               ))
             )}
 
-            {isLoading && (
-              <div className="flex gap-3 justify-start items-center text-xs text-indigo-400">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-                  <Bot className="w-4 h-4 animate-bounce" />
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-                  <span>Agent executing tools & querying Knowledge Base...</span>
-                </div>
-              </div>
-            )}
             <div ref={chatEndRef} />
           </div>
 
