@@ -13,6 +13,16 @@ services:
       - neo4j_logs:/logs
     restart: unless-stopped
 
+  mongodb:
+    image: mongo:6.0
+    container_name: ai_service_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
 volumes:
   neo4j_data:
   neo4j_logs:
+  mongodb_data:
