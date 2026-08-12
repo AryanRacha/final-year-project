@@ -8,15 +8,12 @@ import {
   getAppInstallationUrl,
   syncInstallationRepositories,
 } from "./github-app.service";
-import {
-  verifySignature,
-  handleEvent,
-} from "./webhook.service";
+// import {
+//   verifySignature,
+//   handleEvent,
+// } from "./webhook.service";
 import { db } from "../../db";
-import {
-  githubInstallations,
-  connectedRepositories,
-} from "../../db/schema";
+import { githubInstallations, connectedRepositories } from "../../db/schema";
 import { env } from "../../configs/env";
 
 const githubRouter = new Hono<{ Variables: AuthContextVariables }>();
@@ -45,10 +42,7 @@ githubRouter.get("/callback", authMiddleware, async (c) => {
   }
 
   try {
-    const repos = await syncInstallationRepositories(
-      installationId,
-      user.id,
-    );
+    const repos = await syncInstallationRepositories(installationId, user.id);
 
     return c.json({
       success: true,
@@ -59,10 +53,7 @@ githubRouter.get("/callback", authMiddleware, async (c) => {
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to sync installation";
-    console.error(
-      "❌ Error processing GitHub App installation callback:",
-      err,
-    );
+    console.error("❌ Error processing GitHub App installation callback:", err);
     return c.json({ error: message }, 500);
   }
 });
@@ -126,10 +117,7 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
     .limit(1);
 
   if (!repo) {
-    return c.json(
-      { error: "Repository not found or access denied" },
-      404,
-    );
+    return c.json({ error: "Repository not found or access denied" }, 404);
   }
 
   await db
@@ -147,27 +135,27 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
  * POST /webhooks
  * Public. Ingestion endpoint for GitHub App webhooks.
  */
-githubRouter.post("/webhooks", async (c) => {
-  const signature = c.req.header("x-hub-signature-256") || "";
-  const eventName = c.req.header("x-github-event") || "";
+// githubRouter.post("/webhooks", async (c) => {
+//   const signature = c.req.header("x-hub-signature-256") || "";
+//   const eventName = c.req.header("x-github-event") || "";
 
-  const rawBody = await c.req.text();
+//   const rawBody = await c.req.text();
 
-  // Verify HMAC signature in production
-  const isValid = await verifySignature(rawBody, signature);
-  if (!isValid && env.NODE_ENV === "production") {
-    return c.json({ error: "Invalid webhook signature" }, 401);
-  }
+//   // Verify HMAC signature in production
+//   const isValid = await verifySignature(rawBody, signature);
+//   if (!isValid && env.NODE_ENV === "production") {
+//     return c.json({ error: "Invalid webhook signature" }, 401);
+//   }
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return c.json({ error: "Invalid JSON payload" }, 400);
-  }
+//   let payload: Record<string, unknown>;
+//   try {
+//     payload = JSON.parse(rawBody);
+//   } catch {
+//     return c.json({ error: "Invalid JSON payload" }, 400);
+//   }
 
-  const result = await handleEvent(eventName, payload);
-  return c.json({ received: true, ...result });
-});
+//   const result = await handleEvent(eventName, payload);
+//   return c.json({ received: true, ...result });
+// });
 
 export default githubRouter;
