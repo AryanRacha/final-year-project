@@ -1,4 +1,3 @@
-import { App } from "octokit";
 import { eq } from "drizzle-orm";
 import { env } from "../../configs/env";
 import { db } from "../../db";
@@ -7,23 +6,20 @@ import {
   connectedRepositories,
   type ConnectedRepository,
 } from "../../db/schema";
-
-let octokitApp: App | null = null;
+import { SignJWT, importPKCS8 } from "jose";
 
 /**
- * Lazily initializes the Octokit App instance.
+ * Generates a GitHub App JWT.
  */
-function getOctokitApp(): App {
-  if (!octokitApp) {
-    octokitApp = new App({
-      appId: env.GITHUB_APP_ID,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY,
-      webhooks: {
-        secret: env.GITHUB_WEBHOOK_SECRET,
-      },
-    });
-  }
-  return octokitApp;
+async function getAppJwt(): Promise<string> {
+  const privateKey = await importPKCS8(env.GITHUB_APP_PRIVATE_KEY, "RS256");
+  return new SignJWT({
+    iss: env.GITHUB_APP_ID,
+  })
+    .setProtectedHeader({ alg: "RS256" })
+    .setIssuedAt(Math.floor(Date.now() / 1000) - 60)
+    .setExpirationTime(Math.floor(Date.now() / 1000) + 9 * 60)
+    .sign(privateKey);
 }
 
 /**
@@ -46,14 +42,23 @@ export async function syncInstallationRepositories(
   installationId: string,
   userId: string,
 ): Promise<ConnectedRepository[]> {
-  const app = getOctokitApp();
-  const octokit = await app.getInstallationOctokit(Number(installationId));
+  const appJwt = await getAppJwt();
 
   // Fetch installation metadata
-  const { data: installationData } = await octokit.request(
-    "GET /installation",
+  const instRes = await fetch(
+    `https://api.github.com/app/installations/${installationId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${appJwt}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Sentinel-API",
+      },
+    }
   );
-
+  if (!instRes.ok) {
+    throw new Error(`Failed to fetch installation metadata: ${instRes.statusText}`);
+  }
+  const installationData = await instRes.json();
   const account = installationData.account as
     | { login: string; id: number }
     | null;
@@ -78,10 +83,39 @@ export async function syncInstallationRepositories(
     })
     .returning();
 
-  // Fetch accessible repositories
-  const { data: reposData } = await octokit.request(
-    "GET /installation/repositories",
+  // Create Installation Access Token
+  const tokenRes = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${appJwt}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Sentinel-API",
+      },
+    }
   );
+  if (!tokenRes.ok) {
+    throw new Error(`Failed to create installation access token: ${tokenRes.statusText}`);
+  }
+  const tokenData = await tokenRes.json();
+  const installationToken = tokenData.token;
+
+  // Fetch accessible repositories
+  const reposRes = await fetch(
+    `https://api.github.com/installation/repositories`,
+    {
+      headers: {
+        Authorization: `Bearer ${installationToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Sentinel-API",
+      },
+    }
+  );
+  if (!reposRes.ok) {
+    throw new Error(`Failed to fetch accessible repositories: ${reposRes.statusText}`);
+  }
+  const reposData = await reposRes.json();
 
   const syncedRepos: ConnectedRepository[] = [];
 

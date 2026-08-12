@@ -1,4 +1,3 @@
-import { Webhooks } from "@octokit/webhooks";
 import { eq, and } from "drizzle-orm";
 import { env } from "../../configs/env";
 import { db } from "../../db";
@@ -8,18 +7,31 @@ import {
 } from "../../db/schema";
 import { getUserByGithubId } from "../auth/auth.service";
 
-const webhooks = new Webhooks({ secret: env.GITHUB_WEBHOOK_SECRET });
 
-/**
- * Verifies a GitHub webhook HMAC SHA-256 signature.
- */
 export async function verifySignature(
   rawBody: string,
   signature: string,
 ): Promise<boolean> {
-  if (!signature) return false;
+  if (!signature || !signature.startsWith("sha256=")) return false;
   try {
-    return await webhooks.verify(rawBody, signature);
+    const expectedSig = signature.substring(7);
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(env.GITHUB_WEBHOOK_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signatureBuffer = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      encoder.encode(rawBody)
+    );
+    const hashArray = Array.from(new Uint8Array(signatureBuffer));
+    const calculatedSig = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    
+    return calculatedSig === expectedSig;
   } catch {
     return false;
   }

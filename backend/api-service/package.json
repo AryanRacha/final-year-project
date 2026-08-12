@@ -12,12 +12,10 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
-    "@octokit/webhooks": "^14.2.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.1",
     "jose": "^6.2.8",
-    "octokit": "^5.0.5",
     "vercel": "^58.9.5",
     "ws": "^8.21.3",
     "zod": "^4.4.3"
