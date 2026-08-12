@@ -8,10 +8,7 @@ import {
 //   getAppInstallationUrl,
 //   syncInstallationRepositories,
 // } from "./github-app.service";
-// import {
-//   verifySignature,
-//   handleEvent,
-// } from "./webhook.service";
+import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
 import { githubInstallations, connectedRepositories } from "../../db/schema";
 import { env } from "../../configs/env";
@@ -135,27 +132,27 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
  * POST /webhooks
  * Public. Ingestion endpoint for GitHub App webhooks.
  */
-// githubRouter.post("/webhooks", async (c) => {
-//   const signature = c.req.header("x-hub-signature-256") || "";
-//   const eventName = c.req.header("x-github-event") || "";
+githubRouter.post("/webhooks", async (c) => {
+  const signature = c.req.header("x-hub-signature-256") || "";
+  const eventName = c.req.header("x-github-event") || "";
 
-//   const rawBody = await c.req.text();
+  const rawBody = await c.req.text();
 
-//   // Verify HMAC signature in production
-//   const isValid = await verifySignature(rawBody, signature);
-//   if (!isValid && env.NODE_ENV === "production") {
-//     return c.json({ error: "Invalid webhook signature" }, 401);
-//   }
+  // Verify HMAC signature in production
+  const isValid = await verifySignature(rawBody, signature);
+  if (!isValid && env.NODE_ENV === "production") {
+    return c.json({ error: "Invalid webhook signature" }, 401);
+  }
 
-//   let payload: Record<string, unknown>;
-//   try {
-//     payload = JSON.parse(rawBody);
-//   } catch {
-//     return c.json({ error: "Invalid JSON payload" }, 400);
-//   }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: "Invalid JSON payload" }, 400);
+  }
 
-//   const result = await handleEvent(eventName, payload);
-//   return c.json({ received: true, ...result });
-// });
+  const result = await handleEvent(eventName, payload);
+  return c.json({ received: true, ...result });
+});
 
 export default githubRouter;
