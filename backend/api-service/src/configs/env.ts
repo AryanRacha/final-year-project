@@ -21,7 +21,9 @@ const envSchema = z.object({
   GITHUB_APP_SLUG: z.string().default("my-repo-manager-app"),
   GITHUB_APP_PRIVATE_KEY: z
     .string()
-    .default("-----BEGIN RSA PRIVATE KEY-----\nMOCK_KEY\n-----END RSA PRIVATE KEY-----"),
+    .default(
+      "-----BEGIN RSA PRIVATE KEY-----\nMOCK_KEY\n-----END RSA PRIVATE KEY-----",
+    ),
   GITHUB_WEBHOOK_SECRET: z.string().default("mock_webhook_secret"),
 
   // JWT & Session Security
@@ -34,12 +36,17 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 function loadEnv(): Env {
+  console.log("DB_URL exists:", !!process.env.DB_URL);
+  console.log("NODE_ENV:", process.env.NODE_ENV);
+  console.log("FRONTEND_URL exists:", !!process.env.FRONTEND_URL);
+
   const result = envSchema.safeParse(process.env);
 
   if (!result.success) {
-    const formatted = result.error.flatten().fieldErrors;
-    console.warn("⚠️ Environment variables fallback to defaults:", formatted);
-    return envSchema.parse({});
+    console.error("ENV VALIDATION FAILED");
+    console.error(result.error.flatten().fieldErrors);
+
+    throw new Error("Environment validation failed");
   }
 
   return result.data;
