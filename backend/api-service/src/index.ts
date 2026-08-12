@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { env } from "./configs/env";
-// import apiRouter from "./routes";
+import apiRouter from "./routes";
 
 const app = new Hono();
 
@@ -45,7 +45,7 @@ app.get("/", (c) => {
 // // API Routes
 // // ---------------------------------------------------------------------------
 
-// app.route("/api", apiRouter);
+app.route("/api", apiRouter);
 
 // // ---------------------------------------------------------------------------
 // // Error Handling
