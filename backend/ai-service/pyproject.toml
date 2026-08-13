@@ -23,6 +23,9 @@ dependencies = [
     "fastapi>=0.141.1",
 ]
 
+[tool.vercel]
+entrypoint = "src.ai_service.web.app:app"
+
 [project.scripts]
 ai-service = "ai_service.cli:main"
 
