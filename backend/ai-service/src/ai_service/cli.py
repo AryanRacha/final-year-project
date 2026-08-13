@@ -114,12 +114,15 @@ def mcp():
 
 
 @main.command()
-@click.option("--host", default="127.0.0.1", help="Host address to bind server.")
-@click.option("--port", default=8000, help="Port to bind server.")
-def serve(host: str, port: int):
+@click.option("--host", default="0.0.0.0", help="Host address to bind server. Defaults to 0.0.0.0 for external access.")
+@click.option("--port", default=None, type=int, help="Port to bind server. Defaults to PORT env var or 8000.")
+def serve(host: str, port: Optional[int]):
     """Start FastAPI HTTP server for Chat API & Agent Tool Visualizer backend."""
     import uvicorn
-    uvicorn.run("ai_service.web.app:app", host=host, port=port, reload=True)
+    import os
+    if port is None:
+        port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("ai_service.web.app:app", host=host, port=port, reload=False)
 
 
 
