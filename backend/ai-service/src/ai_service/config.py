@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     neo4j_database: str = "neo4j"
 
     chroma_persist_dir: str = "./chroma_db"
+    chroma_api_key: str = ""
+    chroma_tenant: str = ""
+    chroma_database: str = ""
     gemini_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

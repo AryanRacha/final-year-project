@@ -71,8 +71,15 @@ class VectorKBClient:
         :param persist_directory: Directory to persist the ChromaDB data.
         :param api_key: Gemini API key. If not provided, it will try env vars then config settings.
         """
-        path = persist_directory or settings.chroma_persist_dir
-        self.client = chromadb.PersistentClient(path=path)
+        if settings.chroma_api_key and settings.chroma_tenant and settings.chroma_database:
+            self.client = chromadb.CloudClient(
+                tenant=settings.chroma_tenant,
+                database=settings.chroma_database,
+                api_key=settings.chroma_api_key
+            )
+        else:
+            path = persist_directory or settings.chroma_persist_dir
+            self.client = chromadb.PersistentClient(path=path)
 
         gemini_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or settings.gemini_api_key
         if gemini_key:
