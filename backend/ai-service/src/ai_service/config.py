@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment or .env file."""
 
-    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_uri: str = ""
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "s3cureP@ssword"
+    neo4j_password: str = ""
     neo4j_database: str = "neo4j"
 
     chroma_persist_dir: str = "./chroma_db"

@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
   const fetchRepos = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/repos");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_AI_API_URL}/api/repos`);
       if (res.ok) {
         const data: RepoInfo = await res.json();
         if (data.repos && data.repos.length > 0) {
@@ -117,7 +117,7 @@ export default function DashboardPage() {
     setActiveLatency(undefined);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/chat/stream", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_AI_API_URL}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -258,7 +258,7 @@ export default function DashboardPage() {
     if (!ingestPath.trim() || !ingestRepoId.trim()) return;
     setIsIngesting(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/ingest", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_AI_API_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

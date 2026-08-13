@@ -47,7 +47,7 @@ const user = await db.queryUser(code);
     graph: {
       title: "Multi-Repo Intelligence Dependency Graph",
       codeSnippet: `Graph Traversal Path:
-[frontend] -> POST /api/auth/github/callback 
+[frontend] -> POST /api/v1/auth/github/callback 
   └─> [api-service] -> githubAuthService.handleCallback()
         └─> [ai-service] -> gRPC /vector/embed_symbol
               └─> [ChromaDB] -> Collection: 'symbol_embeddings_v2'`,
