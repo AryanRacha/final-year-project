@@ -1,6 +1,1 @@
-def main():
-    print("Hello from ai-service!")
-
-
-if __name__ == "__main__":
-    main()
+from src.ai_service.web.app import app
