@@ -21,8 +21,10 @@ const envSchema = z.object({
   GITHUB_APP_SLUG: z.string().default("my-repo-manager-app"),
   GITHUB_APP_PRIVATE_KEY: z
     .string()
-    .default("-----BEGIN RSA PRIVATE KEY-----\nMOCK_KEY\n-----END RSA PRIVATE KEY-----"),
+    .default("-----BEGIN RSA PRIVATE KEY-----\nMOCK_KEY\n-----END RSA PRIVATE KEY-----")
+    .transform((val) => val.replace(/\\n/g, "\n").trim()),
   GITHUB_WEBHOOK_SECRET: z.string().default("mock_webhook_secret"),
+  GITHUB_TOKEN: z.string().optional().default(""),
 
   // JWT & Session Security
   JWT_SECRET: z

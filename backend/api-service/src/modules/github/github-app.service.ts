@@ -13,17 +13,79 @@ let octokitApp: App | null = null;
 /**
  * Lazily initializes the Octokit App instance.
  */
-function getOctokitApp(): App {
+export function getOctokitApp(): App | null {
   if (!octokitApp) {
-    octokitApp = new App({
-      appId: env.GITHUB_APP_ID,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY,
-      webhooks: {
-        secret: env.GITHUB_WEBHOOK_SECRET,
-      },
-    });
+    const rawKey = (env.GITHUB_APP_PRIVATE_KEY || "").trim();
+    if (!rawKey || rawKey.includes("MOCK_KEY")) {
+      return null;
+    }
+    let privateKey = rawKey.replace(/\\n/g, "\n").trim();
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1).replace(/\\n/g, "\n").trim();
+    }
+    try {
+      octokitApp = new App({
+        appId: env.GITHUB_APP_ID,
+        privateKey,
+        webhooks: {
+          secret: env.GITHUB_WEBHOOK_SECRET,
+        },
+      });
+    } catch (e: any) {
+      console.warn("⚠️ Octokit App initialization skipped:", e.message || e);
+      return null;
+    }
   }
   return octokitApp;
+}
+
+/**
+ * Dynamically resolves an Octokit client for a given owner/repo.
+ * First checks DB records, then falls back to GitHub App API lookup.
+ */
+export async function getInstallationOctokitForRepo(owner: string, repo: string) {
+  const app = getOctokitApp();
+  if (!app) return null;
+
+  const fullName = `${owner}/${repo}`;
+
+  // 1. Try DB lookup
+  try {
+    const [repoRecord] = await db
+      .select()
+      .from(connectedRepositories)
+      .where(eq(connectedRepositories.fullName, fullName))
+      .limit(1);
+
+    if (repoRecord) {
+      const [instRecord] = await db
+        .select()
+        .from(githubInstallations)
+        .where(eq(githubInstallations.id, repoRecord.installationId))
+        .limit(1);
+
+      if (instRecord && instRecord.installationId) {
+        return await app.getInstallationOctokit(Number(instRecord.installationId));
+      }
+    }
+  } catch (e) {
+    console.warn("DB lookup notice in getInstallationOctokitForRepo:", e);
+  }
+
+  // 2. Query GitHub App API directly
+  try {
+    const { data: instData } = await app.octokit.request("GET /repos/{owner}/{repo}/installation", {
+      owner,
+      repo,
+    });
+    if (instData && instData.id) {
+      return await app.getInstallationOctokit(instData.id);
+    }
+  } catch (err: any) {
+    console.warn(`Could not resolve Octokit installation for ${fullName}:`, err.message || err);
+  }
+
+  return null;
 }
 
 /**
