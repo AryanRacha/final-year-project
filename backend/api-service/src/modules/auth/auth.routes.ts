@@ -13,7 +13,7 @@ const authRouter = new Hono<{ Variables: AuthContextVariables }>();
 
 /**
  * GET /github
- * Redirects the user to GitHub's OAuth authorization screen.
+ * Redirects the user to GitHub OAuth authorization screen.
  */
 authRouter.get("/github", (c) => {
   const state = crypto.randomUUID();
@@ -23,7 +23,7 @@ authRouter.get("/github", (c) => {
 
 /**
  * GET /github/callback
- * GitHub OAuth callback — exchanges code for token, upserts user, signs JWT.
+ * GitHub OAuth callback - exchanges code for token, upserts user, signs JWT.
  */
 authRouter.get("/github/callback", async (c) => {
   const code = c.req.query("code");
@@ -50,30 +50,39 @@ authRouter.get("/github/callback", async (c) => {
       return c.json({ user, token });
     }
 
-    // Otherwise redirect to the frontend with the token
-    const redirectUrl = new URL(env.FRONTEND_URL);
+    // Otherwise redirect to the frontend callback route with the token
+    const baseUrl = (env.FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const redirectUrl = new URL(`${baseUrl}/auth/callback`);
     redirectUrl.searchParams.set("token", token);
     return c.redirect(redirectUrl.toString());
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Authentication failed";
-    console.error("❌ OAuth callback error:", err);
+    console.error("OAuth callback error:", err);
     return c.json({ error: message }, 500);
   }
 });
 
 /**
  * GET /me
- * Returns the authenticated user's profile.
+ * Returns the authenticated user profile with normalized fields.
  */
 authRouter.get("/me", authMiddleware, (c) => {
   const user = c.get("user");
-  return c.json({ user });
+  const normalized = {
+    ...user,
+    avatar_url: user.avatarUrl,
+    github_id: user.githubId,
+    name: user.username,
+    created_at: user.createdAt,
+    updated_at: user.updatedAt,
+  };
+  return c.json({ user: normalized });
 });
 
 /**
  * POST /logout
- * Acknowledges logout. Token invalidation is client-side (remove stored token).
+ * Acknowledges logout. Token invalidation is client-side.
  */
 authRouter.post("/logout", authMiddleware, (c) => {
   return c.json({ success: true, message: "Logged out successfully" });

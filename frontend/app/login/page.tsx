@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import Github from '@/app/components/GithubIcon';
+import Github from '@/components/GithubIcon';
 import {
   ShieldCheck,
   Zap,

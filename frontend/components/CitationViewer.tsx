@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Citation } from "../types";
+import { Citation } from "../app/types";
 import {
   FileCode,
   Database,

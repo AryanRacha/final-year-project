@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ToolStep } from "../types";
+import { ToolStep } from "../app/types";
 import {
   Sparkles,
   ChevronDown,

@@ -58,7 +58,7 @@ export async function syncInstallationRepositories(
   if (!instRes.ok) {
     throw new Error(`Failed to fetch installation metadata: ${instRes.statusText}`);
   }
-  const installationData = await instRes.json();
+  const installationData = (await instRes.json()) as any;
   const account = installationData.account as
     | { login: string; id: number }
     | null;
@@ -98,7 +98,7 @@ export async function syncInstallationRepositories(
   if (!tokenRes.ok) {
     throw new Error(`Failed to create installation access token: ${tokenRes.statusText}`);
   }
-  const tokenData = await tokenRes.json();
+  const tokenData = (await tokenRes.json()) as any;
   const installationToken = tokenData.token;
 
   // Fetch accessible repositories
@@ -115,7 +115,7 @@ export async function syncInstallationRepositories(
   if (!reposRes.ok) {
     throw new Error(`Failed to fetch accessible repositories: ${reposRes.statusText}`);
   }
-  const reposData = await reposRes.json();
+  const reposData = (await reposRes.json()) as any;
 
   const syncedRepos: ConnectedRepository[] = [];
 

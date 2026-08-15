@@ -4,10 +4,10 @@ import {
   authMiddleware,
   type AuthContextVariables,
 } from "../../middlewares/auth.middleware";
-// import {
-//   getAppInstallationUrl,
-//   syncInstallationRepositories,
-// } from "./github-app.service";
+import {
+  getAppInstallationUrl,
+  syncInstallationRepositories,
+} from "./github-app.service";
 import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
 import { githubInstallations, connectedRepositories } from "../../db/schema";
@@ -19,41 +19,41 @@ const githubRouter = new Hono<{ Variables: AuthContextVariables }>();
  * GET /install-url
  * Protected. Returns the GitHub App installation URL for the current user.
  */
-// githubRouter.get("/install-url", authMiddleware, (c) => {
-//   const user = c.get("user");
-//   const installUrl = getAppInstallationUrl(user.id);
-//   return c.json({ installUrl });
-// });
+githubRouter.get("/install-url", authMiddleware, (c) => {
+  const user = c.get("user");
+  const installUrl = getAppInstallationUrl(user.id);
+  return c.json({ installUrl });
+});
 
 /**
  * GET /callback
- * Protected. GitHub App installation callback — syncs repos.
+ * Protected. GitHub App installation callback - syncs repos.
  */
-// githubRouter.get("/callback", authMiddleware, async (c) => {
-//   const user = c.get("user");
-//   const installationId = c.req.query("installation_id");
-//   const setupAction = c.req.query("setup_action");
+githubRouter.get("/callback", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const installationId = c.req.query("installation_id");
+  const setupAction = c.req.query("setup_action");
 
-//   if (!installationId) {
-//     return c.json({ error: "Missing installation_id" }, 400);
-//   }
+  if (!installationId) {
+    return c.json({ error: "Missing installation_id" }, 400);
+  }
 
-//   try {
-//     const repos = await syncInstallationRepositories(installationId, user.id);
+  try {
+    const repos = await syncInstallationRepositories(installationId, user.id);
 
-//     return c.json({
-//       success: true,
-//       setupAction,
-//       installationId,
-//       connectedRepositories: repos,
-//     });
-//   } catch (err: unknown) {
-//     const message =
-//       err instanceof Error ? err.message : "Failed to sync installation";
-//     console.error("❌ Error processing GitHub App installation callback:", err);
-//     return c.json({ error: message }, 500);
-//   }
-// });
+    return c.json({
+      success: true,
+      setupAction,
+      installationId,
+      connectedRepositories: repos,
+    });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to sync installation";
+    console.error("Error processing GitHub App installation callback:", err);
+    return c.json({ error: message }, 500);
+  }
+});
 
 /**
  * GET /installations

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import Github from "@/app/components/GithubIcon";
+import Github from "@/components/GithubIcon";
 import {
   Sparkles,
   GitBranch,
@@ -263,31 +263,28 @@ Agent Step 3: Generated patch for 4 files with 100% type assertion pass.`,
             <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
               <button
                 onClick={() => setActiveTab("guard")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === "guard"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === "guard"
                     ? "bg-zinc-800 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200"
-                }`}
+                  }`}
               >
                 AI Hallucination Guard
               </button>
               <button
                 onClick={() => setActiveTab("graph")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === "graph"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === "graph"
                     ? "bg-zinc-800 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200"
-                }`}
+                  }`}
               >
                 Multi-Repo Graph
               </button>
               <button
                 onClick={() => setActiveTab("agents")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === "agents"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === "agents"
                     ? "bg-zinc-800 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200"
-                }`}
+                  }`}
               >
                 ReAct Fix Agent Trace
               </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ToolStep } from "../types";
+import { ToolStep } from "../app/types";
 import {
   Cpu,
   Search,
@@ -128,11 +128,10 @@ export const ToolVisualizer: React.FC<ToolVisualizerProps> = ({
                   <React.Fragment key={step.id}>
                     <button
                       onClick={() => setSelectedStepId(step.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all shrink-0 cursor-pointer ${
-                        isSelected
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all shrink-0 cursor-pointer ${isSelected
                           ? "bg-zinc-800 border-zinc-600 text-white shadow-md"
                           : "bg-zinc-950 border-zinc-800/90 hover:border-zinc-700 text-zinc-400"
-                      }`}
+                        }`}
                     >
                       <div className="p-1 rounded-md bg-black border border-zinc-800">
                         {getToolIcon(step.tool_name)}
