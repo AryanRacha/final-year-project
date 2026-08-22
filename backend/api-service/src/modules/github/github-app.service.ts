@@ -8,11 +8,37 @@ import {
 } from "../../db/schema";
 import { SignJWT, importPKCS8 } from "jose";
 
+import fs from "fs";
+import path from "path";
+
+/**
+ * Retrieves private key from raw PEM string or file path.
+ */
+function getPrivateKey(): string {
+  const raw = env.GITHUB_APP_PRIVATE_KEY;
+  if (!raw) return "";
+
+  if (raw.includes("-----BEGIN")) {
+    return raw.replace(/\\n/g, "\n");
+  }
+
+  const resolvedPath = path.isAbsolute(raw)
+    ? raw
+    : path.resolve(process.cwd(), raw);
+
+  if (fs.existsSync(resolvedPath)) {
+    return fs.readFileSync(resolvedPath, "utf-8");
+  }
+
+  return raw.replace(/\\n/g, "\n");
+}
+
 /**
  * Generates a GitHub App JWT.
  */
 async function getAppJwt(): Promise<string> {
-  const privateKey = await importPKCS8(env.GITHUB_APP_PRIVATE_KEY, "RS256");
+  const formattedKey = getPrivateKey();
+  const privateKey = await importPKCS8(formattedKey, "RS256");
   return new SignJWT({
     iss: env.GITHUB_APP_ID,
   })

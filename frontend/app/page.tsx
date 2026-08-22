@@ -1,7 +1,9 @@
-"use client";
+'use client';
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Github from "@/components/GithubIcon";
 import {
@@ -28,7 +30,15 @@ import {
 } from "lucide-react";
 
 export default function LandingPage() {
-  const { user, isAuthenticated, loginWithGithub, logout } = useAuth();
+  const router = useRouter();
+  const { user, isAuthenticated, loginWithGithub, logout, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, isLoading, router]);
+  
   const [activeTab, setActiveTab] = useState<"guard" | "graph" | "agents">(
     "guard",
   );

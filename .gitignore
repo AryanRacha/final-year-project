@@ -16,3 +16,4 @@ chroma_db/
 .env*
 
 AGENTS.md
+.agents

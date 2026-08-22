@@ -14,7 +14,7 @@ const envSchema = z.object({
   GITHUB_CLIENT_SECRET: z.string().default("mock_client_secret"),
   GITHUB_OAUTH_REDIRECT_URI: z
     .string()
-    .default("http://localhost:5000/api/auth/github/callback"),
+    .default("http://localhost:5000/api/v1/auth/github/callback"),
 
   // Platform GitHub App (Repo Access & Webhooks)
   GITHUB_APP_ID: z.string().default("123456"),

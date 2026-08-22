@@ -64,9 +64,9 @@ app.notFound((c) => {
 // // Server Export
 // // ---------------------------------------------------------------------------
 
-export default env.NODE_ENV == "development"
+export default env.PORT !== undefined
   ? {
-      port: Number(env.PORT) || 5000,
-      fetch: app.fetch,
-    }
+    port: Number(env.PORT) || 5000,
+    fetch: app.fetch,
+  }
   : app;
