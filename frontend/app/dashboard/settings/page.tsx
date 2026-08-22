@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Settings, Shield, Github, Database, Cpu, CheckCircle2 } from 'lucide-react';
+import { Settings, Shield, Database, Cpu, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function SettingsPage() {
